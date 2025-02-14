@@ -1,9 +1,6 @@
 use quick_xml::events::Event;
 
-use crate::{
-    error::ClientResult,
-    request::RequestBuilder,
-};
+use crate::{error::ClientResult, request::RequestBuilder};
 
 #[derive(Debug, Clone, Default)]
 pub struct Owner {
@@ -134,21 +131,19 @@ impl ListBucketsResult {
             match reader.read_event()? {
                 Event::Eof => break,
 
-                Event::Start(e) => {
-                    match e.local_name().as_ref() {
-                        b"Owner" => {
-                            ret.owner = Owner::from_xml_reader(&mut reader)?;
-                        }
-
-                        b"Bucket" => {
-                            ret.buckets.push(BucketSummary::from_xml_reader(&mut reader)?);
-                        }
-
-                        _ => {
-                            current_tag = String::from_utf8_lossy(e.local_name().as_ref()).to_string();
-                        }
+                Event::Start(e) => match e.local_name().as_ref() {
+                    b"Owner" => {
+                        ret.owner = Owner::from_xml_reader(&mut reader)?;
                     }
-                }
+
+                    b"Bucket" => {
+                        ret.buckets.push(BucketSummary::from_xml_reader(&mut reader)?);
+                    }
+
+                    _ => {
+                        current_tag = String::from_utf8_lossy(e.local_name().as_ref()).to_string();
+                    }
+                },
 
                 Event::Text(e) => match current_tag.as_str() {
                     "Prefix" => ret.prefix = Some(e.unescape()?.to_string()),
@@ -180,16 +175,18 @@ pub struct ListBucketsOptions {
 }
 
 impl crate::oss::Client {
-
+    ///
+    ///
+    ///
     fn build_list_buckets_request(&self, options: &Option<ListBucketsOptions>) -> RequestBuilder {
         let mut request = RequestBuilder::new();
 
         if let Some(opt) = options {
             if let Some(prefix) = &opt.prefix {
-               request = request.add_query("prefix", prefix);
+                request = request.add_query("prefix", prefix);
             }
             if let Some(marker) = &opt.marker {
-               request = request.add_query("marker", marker);
+                request = request.add_query("marker", marker);
             }
             if let Some(max_keys) = &opt.max_keys {
                 request = request.add_query("max-keys", max_keys);
@@ -202,29 +199,33 @@ impl crate::oss::Client {
         request
     }
 
-    /// List buckets response XML:
+    // List buckets response XML:
+    //
+    // ```xml
+    // <?xml version="1.0" encoding="UTF-8"?>
+    // <ListAllMyBucketsResult>
+    //   <Owner>
+    //     <ID>1447573407570489</ID>
+    //     <DisplayName>1447573407570489</DisplayName>
+    //   </Owner>
+    //   <Buckets>
+    //     <Bucket>
+    //       <Comment></Comment>
+    //       <CreationDate>2023-02-14T08:10:05.000Z</CreationDate>
+    //       <ExtranetEndpoint>oss-cn-beijing.aliyuncs.com</ExtranetEndpoint>
+    //       <IntranetEndpoint>oss-cn-beijing-internal.aliyuncs.com</IntranetEndpoint>
+    //       <Location>oss-cn-beijing</Location>
+    //       <Name>yuanyq</Name>
+    //       <Region>cn-beijing</Region>
+    //       <StorageClass>Standard</StorageClass>
+    //     </Bucket>
+    //   </Buckets>
+    // </ListAllMyBucketsResult>
+    // ```
+
     ///
-    /// ```xml
-    /// <?xml version="1.0" encoding="UTF-8"?>
-    /// <ListAllMyBucketsResult>
-    ///   <Owner>
-    ///     <ID>1447573407570489</ID>
-    ///     <DisplayName>1447573407570489</DisplayName>
-    ///   </Owner>
-    ///   <Buckets>
-    ///     <Bucket>
-    ///       <Comment></Comment>
-    ///       <CreationDate>2023-02-14T08:10:05.000Z</CreationDate>
-    ///       <ExtranetEndpoint>oss-cn-beijing.aliyuncs.com</ExtranetEndpoint>
-    ///       <IntranetEndpoint>oss-cn-beijing-internal.aliyuncs.com</IntranetEndpoint>
-    ///       <Location>oss-cn-beijing</Location>
-    ///       <Name>yuanyq</Name>
-    ///       <Region>cn-beijing</Region>
-    ///       <StorageClass>Standard</StorageClass>
-    ///     </Bucket>
-    ///   </Buckets>
-    /// </ListAllMyBucketsResult>
-    /// ```
+    /// See official document for more details: <https://help.aliyun.com/zh/oss/developer-reference/listbuckets?spm=a2c4g.11186623.help-menu-31815.d_5_1_1_3_0.4a08b930Bo8bEt>
+    ///
     pub async fn list_buckets(&self, options: Option<ListBucketsOptions>) -> ClientResult<ListBucketsResult> {
         let request = self.build_list_buckets_request(&options);
 
@@ -233,6 +234,9 @@ impl crate::oss::Client {
         Ok(ListBucketsResult::from_xml(&content)?)
     }
 
+    ///
+    /// With `blocking` feature enabled
+    ///
     #[cfg(feature = "blocking")]
     pub fn list_buckets_sync(&self, options: Option<ListBucketsOptions>) -> ClientResult<ListBucketsResult> {
         let request = self.build_list_buckets_request(&options);
@@ -242,7 +246,6 @@ impl crate::oss::Client {
         Ok(ListBucketsResult::from_xml(&content)?)
     }
 }
-
 
 #[cfg(all(test, not(feature = "blocking")))]
 #[cfg(test)]
@@ -258,7 +261,7 @@ mod test_bucket {
     fn setup() {
         INIT.call_once(|| {
             simple_logger::init_with_level(log::Level::Debug).unwrap();
-                dotenvy::dotenv().unwrap();
+            dotenvy::dotenv().unwrap();
         });
     }
 
@@ -317,7 +320,6 @@ mod test_bucket {
         let result = response.unwrap();
         assert!(result.buckets.is_empty());
 
-
         debug!("test list buckets with options: max-keys");
 
         let options = ListBucketsOptions {
@@ -333,7 +335,6 @@ mod test_bucket {
         assert!(result.next_marker.is_some());
         assert_eq!(Some(true), result.is_truncated);
         assert_eq!(2, result.buckets.len());
-
     }
 }
 

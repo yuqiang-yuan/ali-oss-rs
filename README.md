@@ -1,15 +1,15 @@
-# 阿里云 OSS Rust SDK
+# Aliyun OSS Rust SDK
 
-*本项目还在积极开发中*
+*This project is under active development*
 
-阿里云对象存储服务（Object Storage Service，简称 OSS）是阿里云提供的海量、安全、低成本、高可靠的云存储服务。用户可以通过简单的 REST 接口，在任何时间、任何地点、任何互联网设备上存储和访问任意类型的数据。OSS 提供了多种语言的 SDK，方便开发者快速接入 OSS 服务。
+Aliyun Object Storage Service (OSS) is a massive, secure, cost-effective, and highly reliable cloud storage service provided by Alibaba Cloud. Users can store and access any type of data at any time, from anywhere, using any internet device through simple REST interfaces. OSS provides SDKs in multiple programming languages to help developers quickly integrate with OSS services.
 
-## 功能特性
+## Features
 
-- 默认采用异步方式调用阿里云 API
-- 通过 `blocking` 特性支持同步调用
+- Uses asynchronous calls to Aliyun API by default
+- Supports synchronous calls via the `blocking` feature
 
-## 已实现的功能
+## Implemented Operations
 
 - Bucket
   - List Buckets

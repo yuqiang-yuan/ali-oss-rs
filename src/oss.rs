@@ -1,3 +1,9 @@
+//! There are 2 ways to create [`Client`] instance:
+//!
+//! - [`Client::new`] Create instance with options
+//! - [`Client::from_env`] Create instance from environment variables
+//!
+
 use std::str::FromStr;
 
 use log::{debug, error};
@@ -38,6 +44,13 @@ pub struct Client {
 }
 
 impl Client {
+    /// Creates a new client from environment variables.
+    ///
+    /// - `ALI_ACCESS_KEY_ID` The access key id
+    /// - `ALI_ACCESS_KEY_SECRET` The access key secret
+    /// - `ALI_OSS_ENDPOINT` The endpoint of the OSS service. e.g. `oss-cn-hangzhou.aliyuncs.com`. Or, you can write full URL `http://oss-cn-hangzhou.aliyuncs.com` or `https://oss-cn-hangzhou.aliyuncs.com` with scheme `http` or `https`.
+    /// - `ALI_OSS_REGION` Optional. The region of the OSS service. If not present, It will be inferred from the `ALI_OSS_ENDPOINT` env.
+    ///
     pub fn from_env() -> Self {
         let access_key_id = std::env::var("ALI_ACCESS_KEY_ID").expect("env var ALI_ACCESS_KEY_ID is missing");
         let access_key_secret = std::env::var("ALI_ACCESS_KEY_SECRET").expect("env var ALI_ACCESS_KEY_SECRET is missing");
@@ -322,10 +335,8 @@ impl Client {
                         let error_response = ErrorResponse::from_xml(&s)?;
                         Err(ClientError::ApiError(Box::new(error_response)))
                     }
-                },
-                Err(_) => {
-                    Err(ClientError::Error(format!("API call failed with status code: {}", status.as_str())))
                 }
+                Err(_) => Err(ClientError::Error(format!("API call failed with status code: {}", status.as_str()))),
             }
         } else {
             let s = response.text().await?;
@@ -382,16 +393,13 @@ impl Client {
                         let error_response = ErrorResponse::from_xml(&s)?;
                         Err(ClientError::ApiError(Box::new(error_response)))
                     }
-                },
-                Err(_) => {
-                    Err(ClientError::Error(format!("API call failed with status code: {}", status.as_str())))
                 }
+                Err(_) => Err(ClientError::Error(format!("API call failed with status code: {}", status.as_str()))),
             }
         } else {
             let s = response.text()?;
             debug!("\n-------- \n{}--------", s);
             Ok(s)
         }
-
     }
 }
