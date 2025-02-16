@@ -1,7 +1,18 @@
 use std::{
     collections::{HashMap, HashSet},
     fmt::Display,
+    path::PathBuf,
 };
+
+// 首先定义 RequestBody 枚举
+#[derive(Debug, Default)]
+pub(crate) enum RequestBody {
+    #[default]
+    Empty,
+    Text(String),
+    Bytes(Vec<u8>),
+    File(PathBuf),
+}
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum RequestMethod {
@@ -35,6 +46,8 @@ pub(crate) struct RequestBuilder {
     // 由于构建 Canonical Headers 的时候，请求头都是小写的，所以这里在存入 Set 的时候就转换小写。
     pub additional_headers: HashSet<String>,
     pub query: HashMap<String, String>,
+
+    pub body: RequestBody,
 }
 
 impl RequestBuilder {
@@ -49,6 +62,7 @@ impl RequestBuilder {
             ]),
             additional_headers: HashSet::new(),
             query: HashMap::new(),
+            body: RequestBody::Empty,
         }
     }
 
@@ -110,6 +124,24 @@ impl RequestBuilder {
     {
         self.additional_headers.insert(name.as_ref().to_lowercase());
         self
+    }
+
+    // 添加设置 body 的便捷方法
+    pub fn body(mut self, body: RequestBody) -> Self {
+        self.body = body;
+        self
+    }
+
+    pub fn text_body<S: Into<String>>(self, text: S) -> Self {
+        self.body(RequestBody::Text(text.into()))
+    }
+
+    pub fn bytes_body<B: Into<Vec<u8>>>(self, bytes: B) -> Self {
+        self.body(RequestBody::Bytes(bytes.into()))
+    }
+
+    pub fn file_body<P: Into<PathBuf>>(self, path: P) -> Self {
+        self.body(RequestBody::File(path.into()))
     }
 
     pub fn headers_mut(&mut self) -> &mut HashMap<String, String> {

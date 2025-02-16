@@ -14,7 +14,7 @@ use reqwest::{
 
 use crate::{
     error::{ClientError, ClientResult, ErrorResponse},
-    request::RequestMethod,
+    request::{RequestBody, RequestMethod},
     util::{self, hmac_sha256},
 };
 
@@ -303,7 +303,7 @@ impl Client {
         let domain_name = if request_builder.bucket_name.is_empty() {
             format!("{}://{}{}", self.scheme, self.endpoint, uri)
         } else {
-            format!("{}://{}.{}{}", request_builder.bucket_name, self.scheme, self.endpoint, uri)
+            format!("{}://{}.{}{}", self.scheme, request_builder.bucket_name, self.endpoint, uri)
         };
 
         let full_url = if query_string.is_empty() {
@@ -314,16 +314,26 @@ impl Client {
 
         debug!("full url: {}", full_url);
 
-        let req_builder = self
+        let mut req_builder = self
             .http_client
             .request(request_builder.method.into(), Url::parse(&full_url)?)
             .headers(header_map);
+
+        // 根据 body 类型设置请求体
+        req_builder = match request_builder.body {
+            RequestBody::Empty => req_builder,
+            RequestBody::Text(text) => req_builder.body(text),
+            RequestBody::Bytes(bytes) => req_builder.body(bytes),
+            RequestBody::File(path) => {
+                todo!("Implement file upload")
+            }
+        };
 
         let req = req_builder.build()?;
 
         let response = self.http_client.execute(req).await?;
 
-        if response.status() != reqwest::StatusCode::OK {
+        if !response.status().is_success() {
             let status = response.status();
 
             match response.text().await {
@@ -362,7 +372,7 @@ impl Client {
         let domain_name = if request_builder.bucket_name.is_empty() {
             format!("{}://{}{}", self.scheme, self.endpoint, uri)
         } else {
-            format!("{}://{}.{}{}", request_builder.bucket_name, self.scheme, self.endpoint, uri)
+            format!("{}://{}.{}{}", self.scheme, request_builder.bucket_name, self.endpoint, uri)
         };
 
         let full_url = if query_string.is_empty() {
@@ -371,16 +381,26 @@ impl Client {
             format!("{}?{}", domain_name, query_string)
         };
 
-        let req_builder = self
+        let mut req_builder = self
             .http_client_sync
             .request(request_builder.method.into(), Url::parse(&full_url)?)
             .headers(header_map);
+
+        // 根据 body 类型设置请求体
+        req_builder = match request_builder.body {
+            RequestBody::Empty => req_builder,
+            RequestBody::Text(text) => req_builder.body(text),
+            RequestBody::Bytes(bytes) => req_builder.body(bytes),
+            RequestBody::File(path) => {
+                todo!("Implement file upload")
+            }
+        };
 
         let req = req_builder.build()?;
 
         let response = self.http_client_sync.execute(req)?;
 
-        if response.status() != reqwest::StatusCode::OK {
+        if !response.status().is_success() {
             let status = response.status();
 
             match response.text() {

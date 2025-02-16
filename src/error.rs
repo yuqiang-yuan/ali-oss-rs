@@ -91,6 +91,12 @@ pub enum ClientError {
     ApiError(Box<ErrorResponse>),
 
     #[error("{0}")]
+    IoError(#[from] std::io::Error),
+
+    #[error("{0}")]
+    FromUtf8Error(#[from] std::string::FromUtf8Error),
+
+    #[error("{0}")]
     Error(String),
 }
 

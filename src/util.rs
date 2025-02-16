@@ -75,6 +75,28 @@ pub(crate) fn debug_request(req: &reqwest::Request) {
     debug!("\nVersion: {:?}", req.version());
 }
 
+///
+/// Bucket name validation.
+///
+/// - lenght between [3, 63]
+/// - only lowercase letters, digits, and hyphens are allowed
+/// - must start and end with a letter or digit (not a hyphen)
+///
+pub(crate) fn validate_bucket_name(name: &str) -> bool {
+    // 检查长度
+    if name.len() < 3 || name.len() > 63 {
+        return false;
+    }
+
+    // 检查是否以短横线开头或结尾
+    if name.starts_with('-') || name.ends_with('-') {
+        return false;
+    }
+
+    // 检查字符是否合法
+    name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+}
+
 #[cfg(test)]
 mod test {
     use crate::util::{get_http_date, get_iso8601_date_string};

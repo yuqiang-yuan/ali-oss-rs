@@ -7,9 +7,11 @@ Aliyun Object Storage Service (OSS) is a massive, secure, cost-effective, and hi
 ## Features
 
 - Uses asynchronous calls to Aliyun API by default
-- Supports synchronous calls via the `blocking` feature
+- Supports synchronous calls with `blocking` feature enabled
 
 ## Implemented Operations
 
 - Bucket
+  - Create Bucket
   - List Buckets
+  - Delete Bucket
