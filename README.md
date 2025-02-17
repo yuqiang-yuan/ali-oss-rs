@@ -12,6 +12,9 @@ Aliyun Object Storage Service (OSS) is a massive, secure, cost-effective, and hi
 ## Implemented Operations
 
 - Bucket
-  - Create Bucket
-  - List Buckets
-  - Delete Bucket
+  - Create bucket
+  - List buckets
+  - Delete bucket
+  - Get bucket information
+  - Get bucket stat
+  - Get bucket location
