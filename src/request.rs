@@ -132,6 +132,16 @@ impl RequestBuilder {
         self
     }
 
+    pub fn content_type(mut self, content_type: &str) -> Self {
+        self.headers.insert("Content-Type".to_string(), content_type.to_string());
+        self
+    }
+
+    pub fn content_length(mut self, len: usize) -> Self {
+        self.headers.insert("Content-Length".to_string(), len.to_string());
+        self
+    }
+
     pub fn text_body<S: Into<String>>(self, text: S) -> Self {
         self.body(RequestBody::Text(text.into()))
     }

@@ -97,6 +97,9 @@ pub enum ClientError {
     FromUtf8Error(#[from] std::string::FromUtf8Error),
 
     #[error("{0}")]
+    ParseIntError(#[from] std::num::ParseIntError),
+
+    #[error("{0}")]
     Error(String),
 }
 

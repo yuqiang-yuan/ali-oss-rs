@@ -1,4 +1,4 @@
 /target
+.zed
 .env
 .rustfmt.toml
-

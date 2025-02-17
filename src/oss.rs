@@ -167,7 +167,13 @@ impl Client {
 
         pairs.sort_by(|e1, e2| e1.0.cmp(&e2.0));
 
-        pairs.iter().map(|(k, v)| format!("{}={}", k, v)).collect::<Vec<_>>().join("&")
+        pairs.iter().map(|(k, v)| {
+            if v.is_empty() {
+                k.to_string()
+            } else {
+                format!("{}={}", k, v)
+            }
+        }).collect::<Vec<_>>().join("&")
     }
 
     /// 对请求 Header 的列表格式化后的字符串，各个 Header 之间需要添加换行符分隔。
