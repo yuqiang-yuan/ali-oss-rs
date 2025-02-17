@@ -8,6 +8,9 @@ Aliyun Object Storage Service (OSS) is a massive, secure, cost-effective, and hi
 
 - Uses asynchronous calls to Aliyun API by default
 - Supports synchronous calls with `blocking` feature enabled
+- Supports serialization and deserialization of data with `serde` feature enabled
+- Supports field name "camelCase" while serializing/deserializing data with `serde_camelcase` feature enabled
+- Supports using rust tls with `rust-tls` feature enabled
 
 ## Implemented Operations
 
@@ -18,3 +21,4 @@ Aliyun Object Storage Service (OSS) is a massive, secure, cost-effective, and hi
   - Get bucket information
   - Get bucket stat
   - Get bucket location
+  - List objects in bucket. (v2)

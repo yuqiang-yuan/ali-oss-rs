@@ -58,22 +58,22 @@ pub(crate) fn sha256(data: &[u8]) -> Vec<u8> {
     data.to_vec()
 }
 
-pub(crate) fn debug_request(req: &reqwest::Request) {
-    debug!("Request Details:");
-    debug!("---------------");
+// pub(crate) fn debug_request(req: &reqwest::Request) {
+//     debug!("Request Details:");
+//     debug!("---------------");
 
-    // Method and URL
-    debug!("Method: {}", req.method());
-    debug!("URL: {}", req.url());
+//     // Method and URL
+//     debug!("Method: {}", req.method());
+//     debug!("URL: {}", req.url());
 
-    // Headers
-    debug!("\nHeaders:");
-    for (name, value) in req.headers() {
-        debug!("  {}: {}", name, value.to_str().unwrap_or("[invalid]"));
-    }
-    // Version
-    debug!("\nVersion: {:?}", req.version());
-}
+//     // Headers
+//     debug!("\nHeaders:");
+//     for (name, value) in req.headers() {
+//         debug!("  {}: {}", name, value.to_str().unwrap_or("[invalid]"));
+//     }
+//     // Version
+//     debug!("\nVersion: {:?}", req.version());
+// }
 
 ///
 /// Bucket name validation.

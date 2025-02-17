@@ -1,15 +1,66 @@
+//! Common types: structs and enumerations
 use std::fmt::Display;
 
-use crate::error::ClientError;
+use quick_xml::events::Event;
+
+use crate::error::{ClientError, ClientResult};
+
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+pub struct Owner {
+    pub id: String,
+    pub display_name: String,
+}
+
+impl Owner {
+    pub(crate) fn from_xml_reader(reader: &mut quick_xml::Reader<&[u8]>) -> ClientResult<Self> {
+        let mut current_tag = "".to_string();
+        let mut owner = Self::default();
+
+        loop {
+            match reader.read_event()? {
+                Event::Eof => break,
+
+                Event::Start(e) => {
+                    current_tag = String::from_utf8_lossy(e.local_name().as_ref()).into_owned();
+                }
+
+                Event::Text(e) => match current_tag.as_str() {
+                    "ID" => owner.id = e.unescape()?.to_string(),
+                    "DisplayName" => owner.display_name = e.unescape()?.to_string(),
+                    _ => {}
+                },
+
+                Event::End(e) => {
+                    current_tag.clear();
+                    if e.local_name().as_ref() == b"Owner" {
+                        break;
+                    }
+                },
+
+                _ => {}
+            }
+        }
+
+        Ok(owner)
+    }
+}
 
 ///
 /// Represents the access control list (ACL) for an object in Aliyun OSS.
 ///
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Acl {
+    #[cfg_attr(feature = "serde", serde(rename = "public-read-write"))]
     PublicReadWrite,
+
+    #[cfg_attr(feature = "serde", serde(rename = "public-read"))]
     PublicRead,
+
     #[default]
+    #[cfg_attr(feature = "serde", serde(rename = "private"))]
     Private,
 }
 
@@ -72,12 +123,22 @@ impl TryFrom<&String> for Acl {
 /// Represents the storage class for an object in Aliyun OSS.
 ///
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum StorageClass {
     #[default]
+    #[cfg_attr(feature = "serde", serde(rename = "Standard"))]
     Standard,
+
+    #[cfg_attr(feature = "serde", serde(rename = "IA"))]
     IA,
+
+    #[cfg_attr(feature = "serde", serde(rename = "Archive"))]
     Archive,
+
+    #[cfg_attr(feature = "serde", serde(rename = "ColdArchive"))]
     ColdArchive,
+
+    #[cfg_attr(feature = "serde", serde(rename = "DeepColdArchive"))]
     DeepColdArchive,
 }
 
@@ -143,9 +204,13 @@ impl TryFrom<&String> for StorageClass {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum DataRedundancyType {
     #[default]
+    #[cfg_attr(feature = "serde", serde(rename = "LRS"))]
     LRS,
+
+    #[cfg_attr(feature = "serde", serde(rename = "ZRS"))]
     ZRS,
 }
 
@@ -213,10 +278,13 @@ pub struct KvPair {
 /// - `Disabled`
 ///
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum OnOff {
+    #[cfg_attr(feature = "serde", serde(rename = "Enabled"))]
     Enabled,
 
     #[default]
+    #[cfg_attr(feature = "serde", serde(rename = "Disabled"))]
     Disabled,
 }
 
@@ -272,10 +340,13 @@ pub type AccessMonitor = OnOff;
 /// Versioning enumeration
 ///
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Versioning {
+    #[cfg_attr(feature = "serde", serde(rename = "Enabled"))]
     Enabled,
 
     #[default]
+    #[cfg_attr(feature = "serde", serde(rename = "Suspended"))]
     Suspended,
 }
 
@@ -323,10 +394,16 @@ impl TryFrom<&String> for Versioning {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum ServerSideEncryptionAlgorithm {
     #[default]
+    #[cfg_attr(feature = "serde", serde(rename = "KMS"))]
     KMS,
+
+    #[cfg_attr(feature = "serde", serde(rename = "AES256"))]
     AES256,
+
+    #[cfg_attr(feature = "serde", serde(rename = "SM4"))]
     SM4,
 }
 
@@ -375,12 +452,68 @@ impl TryFrom<&String> for ServerSideEncryptionAlgorithm {
     }
 }
 
-
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
 pub struct ServerSideEncryptionRule {
     pub sse_algorithm: ServerSideEncryptionAlgorithm,
 
     /// Only present when sse_algorithm is `KMS`
     pub kms_master_key_id: Option<String>,
-    pub kms_data_encryption: Option<String>
+    pub kms_data_encryption: Option<String>,
+}
+
+///
+/// Object type enumeration
+///
+#[derive(Debug, Clone, Default, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+pub enum ObjectType {
+    #[default]
+    Normal,
+    Multipart,
+    Appendable,
+    Symlink,
+}
+
+impl ObjectType {
+    pub fn as_str(&self) -> &str {
+        match self {
+            ObjectType::Normal => "Normal",
+            ObjectType::Multipart => "Multipart",
+            ObjectType::Appendable => "Appendable",
+            ObjectType::Symlink => "Symlink",
+        }
+    }
+}
+
+impl TryFrom<&str> for ObjectType {
+    type Error = ClientError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "Normal" => Ok(ObjectType::Normal),
+            "Multipart" => Ok(ObjectType::Multipart),
+            "Appendable" => Ok(ObjectType::Appendable),
+            "Symlink" => Ok(ObjectType::Symlink),
+            _ => Err(ClientError::Error(format!("Invalid ObjectType value: {}", value))),
+        }
+    }
+}
+
+impl TryFrom<String> for ObjectType {
+    type Error = ClientError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::try_from(value.as_str())
+    }
+}
+
+impl TryFrom<&String> for ObjectType {
+    type Error = ClientError;
+
+    fn try_from(value: &String) -> Result<Self, Self::Error> {
+        Self::try_from(value.as_str())
+    }
 }

@@ -1,54 +1,21 @@
+//! Basic bucket operations
+
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 
 use crate::{
-    common::{AccessMonitor, Acl, CrossRegionReplication, DataRedundancyType, ServerSideEncryptionAlgorithm, ServerSideEncryptionRule, StorageClass, TransferAcceleration, Versioning},
+    common::{
+        AccessMonitor, Acl, CrossRegionReplication, DataRedundancyType, ObjectType, Owner, ServerSideEncryptionAlgorithm, ServerSideEncryptionRule,
+        StorageClass, TransferAcceleration, Versioning,
+    },
     error::{ClientError, ClientResult},
     request::{RequestBody, RequestBuilder, RequestMethod},
     util::validate_bucket_name,
 };
 
-#[derive(Debug, Clone, Default)]
-pub struct Owner {
-    id: String,
-    display_name: String,
-}
-
-impl Owner {
-    pub(crate) fn from_xml_reader(reader: &mut quick_xml::Reader<&[u8]>) -> ClientResult<Self> {
-        let mut current_tag = "".to_string();
-        let mut owner = Self::default();
-
-        loop {
-            match reader.read_event()? {
-                Event::Eof => break,
-
-                Event::Start(e) => {
-                    current_tag = String::from_utf8_lossy(e.local_name().as_ref()).into_owned();
-                }
-
-                Event::Text(e) => match current_tag.as_str() {
-                    "ID" => owner.id = e.unescape()?.to_string(),
-                    "DisplayName" => owner.display_name = e.unescape()?.to_string(),
-                    _ => {}
-                },
-
-                Event::End(e) => {
-                    current_tag.clear();
-                    if e.local_name().as_ref() == b"Owner" {
-                        break;
-                    }
-                }
-
-                _ => {}
-            }
-        }
-
-        Ok(owner)
-    }
-}
-
 /// Summary information of a bucket.
 #[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
 pub struct BucketSummary {
     pub name: String,
     pub location: String,
@@ -107,6 +74,8 @@ impl BucketSummary {
 /// Bucket policy
 ///
 #[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
 pub struct BucketPolicy {
     pub log_bucket: String,
     pub log_prefix: String,
@@ -116,6 +85,8 @@ pub struct BucketPolicy {
 /// Bucket detail information
 ///
 #[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
 pub struct BucketDetail {
     pub name: String,
     pub location: String,
@@ -156,7 +127,7 @@ impl BucketDetail {
                 },
                 Event::End(_) => {
                     current_tag.clear();
-                },
+                }
                 _ => {}
             }
         }
@@ -203,10 +174,16 @@ impl BucketDetail {
                     "DataRedundancyType" => bucket.data_redundancy_type = DataRedundancyType::try_from(e.unescape()?.to_string())?,
                     "CrossRegionReplication" => bucket.cross_region_acceleration = CrossRegionReplication::try_from(e.unescape()?.to_string())?,
                     "TransferAcceleration" => bucket.transfer_acceleration = TransferAcceleration::try_from(e.unescape()?.to_string())?,
-                    "Grant" if tags.get(tags.len() - 2) == Some(&"AccessControlList".to_string()) => bucket.access_control_list.push(Acl::try_from(e.unescape()?.to_string())?),
+                    "Grant" if tags.get(tags.len() - 2) == Some(&"AccessControlList".to_string()) => {
+                        bucket.access_control_list.push(Acl::try_from(e.unescape()?.to_string())?)
+                    }
                     "SSEAlgorithm" if tags.get(tags.len() - 2) == Some(&"ServerSideEncryptionRule".to_string()) => sse_algorithm = e.unescape()?.to_string(),
-                    "KMSMasterKeyID" if tags.get(tags.len() - 2) == Some(&"ServerSideEncryptionRule".to_string()) => kms_master_key_id = e.unescape()?.to_string(),
-                    "KMSDataEncryption" if tags.get(tags.len() - 2) == Some(&"ServerSideEncryptionRule".to_string()) => kms_data_encryption = e.unescape()?.to_string(),
+                    "KMSMasterKeyID" if tags.get(tags.len() - 2) == Some(&"ServerSideEncryptionRule".to_string()) => {
+                        kms_master_key_id = e.unescape()?.to_string()
+                    }
+                    "KMSDataEncryption" if tags.get(tags.len() - 2) == Some(&"ServerSideEncryptionRule".to_string()) => {
+                        kms_data_encryption = e.unescape()?.to_string()
+                    }
                     "BlockPublicAccess" => bucket.block_public_access = e.unescape()? == "true",
                     "LogBucket" => bucket.bucket_policy.log_bucket = e.unescape()?.to_string(),
                     "LogPrefix" => bucket.bucket_policy.log_prefix = e.unescape()?.to_string(),
@@ -250,6 +227,8 @@ impl BucketDetail {
 /// - `next_marker`
 ///
 #[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
 pub struct ListBucketsResult {
     pub prefix: Option<String>,
     pub marker: Option<String>,
@@ -309,6 +288,8 @@ impl ListBucketsResult {
 }
 
 #[derive(Default, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
 pub struct ListBucketsOptions {
     pub prefix: Option<String>,
     pub marker: Option<String>,
@@ -317,6 +298,8 @@ pub struct ListBucketsOptions {
 }
 
 #[derive(Default, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
 pub struct PutBucketConfiguration {
     pub storage_class: Option<StorageClass>,
     pub data_redundancy_type: Option<DataRedundancyType>,
@@ -348,6 +331,8 @@ impl PutBucketConfiguration {
 }
 
 #[derive(Default, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
 pub struct PutBucketOptions {
     pub acl: Option<Acl>,
     pub resource_group_id: Option<String>,
@@ -369,7 +354,7 @@ fn extract_bucket_location(xml: &str) -> ClientResult<String> {
                 if tag == "LocationConstraint" {
                     location = s.unescape()?.to_string();
                 }
-            },
+            }
             Event::End(_) => tag.clear(),
             _ => {}
         }
@@ -382,6 +367,8 @@ fn extract_bucket_location(xml: &str) -> ClientResult<String> {
 /// Bucket statistics data. All statistical items are counted in bytes
 ///
 #[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
 pub struct BucketStat {
     pub storage: u64,
     pub object_count: u64,
@@ -451,6 +438,171 @@ impl BucketStat {
     }
 }
 
+///
+/// Object summary data for list objects v2
+///
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+pub struct ObjectSummary {
+    pub key: String,
+
+    /// e.g. `2012-02-24T08:42:32.000Z`
+    pub last_modified: String,
+
+    /// This etag is starts and ends with double quotation characters (`"`)
+    /// and maybe includes hyphen (`-`) if there are multiple files have the same hash value.
+    pub etag: String,
+    pub object_type: ObjectType,
+    pub size: u64,
+    pub storage_class: StorageClass,
+
+    /// Only presents when query with `fetch_owner` is set to `true`
+    pub owner: Option<Owner>,
+
+    pub restore_info: Option<String>,
+}
+
+impl ObjectSummary {
+    pub(crate) fn from_xml_reader(reader: &mut quick_xml::Reader<&[u8]>) -> ClientResult<Self> {
+        let mut tag = String::new();
+
+        let mut data = Self::default();
+
+        loop {
+            match reader.read_event()? {
+                Event::Eof => break,
+                Event::Start(t) => match t.local_name().as_ref() {
+                    b"Owner" => data.owner = Some(Owner::from_xml_reader(reader)?),
+                    _ => tag = String::from_utf8_lossy(t.local_name().as_ref()).to_string()
+                },
+                Event::Text(s) => match tag.as_str() {
+                    "Key" => data.key = s.unescape()?.to_string(),
+                    "LastModified" => data.last_modified = s.unescape()?.to_string(),
+                    "ETag" => data.etag = s.unescape()?.to_string(),
+                    "Type" => data.object_type = ObjectType::try_from(s.unescape()?.to_string())?,
+                    "Size" => data.size = s.unescape()?.to_string().parse()?,
+                    "StorageClass" => data.storage_class = StorageClass::try_from(s.unescape()?.to_string())?,
+                    "RestoreInfo" => data.restore_info = Some(s.unescape()?.to_string()),
+                    _ => {}
+                },
+                Event::End(t) => {
+                    if t.local_name().as_ref() == b"Contents" {
+                        break;
+                    }
+                    tag.clear();
+                }
+                _ => {}
+            }
+        }
+
+        Ok(data)
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+pub struct ListObjectsResult {
+    pub name: String,
+    pub prefix: String,
+    pub max_keys: u32,
+    pub delimiter: String,
+    pub start_after: Option<String>,
+    pub is_truncated: bool,
+    pub key_count: u64,
+    pub continuation_token: Option<String>,
+    pub next_continuation_token: Option<String>,
+    pub common_prefixes: Vec<String>,
+    pub contents: Vec<ObjectSummary>,
+}
+
+impl ListObjectsResult {
+    pub(crate) fn from_xml(xml: &str) -> ClientResult<Self> {
+        let mut reader = quick_xml::Reader::from_str(xml);
+        let mut tag = String::new();
+        let mut data = Self::default();
+
+        let mut tags = vec![];
+
+        loop {
+            match reader.read_event()? {
+                Event::Eof => break,
+                Event::Start(t) => match t.local_name().as_ref() {
+                    b"Contents" => data.contents.push(ObjectSummary::from_xml_reader(&mut reader)?),
+                    _ => {
+                        tag = String::from_utf8_lossy(t.local_name().as_ref()).to_string();
+                        tags.push(tag.clone());
+                    }
+                }
+                Event::Text(s) => match tag.as_str() {
+                    "Name" => data.name = s.unescape()?.to_string(),
+                    "StartAfter" => data.start_after = Some(s.unescape()?.to_string()),
+                    "MaxKeys" => data.max_keys = s.unescape()?.to_string().parse()?,
+                    "Delimiter" => data.delimiter = s.unescape()?.to_string(),
+                    "IsTruncated" => data.is_truncated = s.unescape()? == "true",
+                    "KeyCount" => data.key_count = s.unescape()?.to_string().parse()?,
+                    "ContinuationToken" => data.continuation_token = Some(s.unescape()?.to_string()),
+                    "NextContinuationToken" => data.next_continuation_token = Some(s.unescape()?.to_string()),
+                    "Prefix" => {
+                        // there 2 elements named `Prefix`, one is under root element, the other is `root/CommPrefixes`
+                        let prefix = s.unescape()?.to_string();
+                        if tags.len() == 2 {
+                            data.prefix = prefix;
+                        } else if tags.len() == 3 {
+                            data.common_prefixes.push(prefix);
+                        }
+                    },
+                    _ => {}
+                },
+                Event::End(_) => {
+                    tags.pop();
+                    tag.clear();
+                },
+                _ => {}
+            }
+        }
+
+        Ok(data)
+    }
+}
+
+/// Query options for listing objects in a bucket
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+pub struct ListObjectOptions {
+    /// 对 Object 名字进行分组的字符。所有名字包含指定的前缀且第一次出现 `delimiter` 字符之间的 Object 作为一组元素 `common_prefixes`
+    pub delimiter: Option<String>,
+
+    /// 设定从 `start_after` 之后按字母排序开始返回 Object。
+    /// `start_after` 用来实现分页显示效果，参数的长度必须小于 1024 字节。
+    /// 做条件查询时，即使 `start_after` 在列表中不存在，也会从符合 `start_after` 字母排序的下一个开始打印。
+    pub start_after: Option<String>,
+
+    /// 指定 List 操作需要从此 `token` 开始。您可从请求结果中的 `next_continuation_token` 获取此 `token`。
+    pub continuation_token: Option<String>,
+
+    /// 指定返回 Object 的最大数。取值：大于 0 小于等于 1000
+    pub max_keys: Option<u32>,
+
+    /// 限定返回文件的Key必须以 `prefix` 作为前缀。
+    /// 如果把 `prefix` 设为某个文件夹名，则列举以此 `prefix` 开头的文件，即该文件夹下递归的所有文件和子文件夹。
+    /// 在设置 `prefix` 的基础上，将 `delimiter` 设置为正斜线（`/`）时，返回值就只列举该文件夹下的文件，文件夹下的子文件夹名返回在 `CommonPrefixes` 中，子文件夹下递归的所有文件和文件夹不显示。
+    /// 例如，一个 Bucket 中有三个 Object，分别为
+    ///
+    /// - `fun/test.jpg`
+    /// - `fun/movie/001.avi`
+    /// - `fun/movie/007.avi`
+    ///
+    /// 如果设定 `prefix` 为 `fun/`，则返回三个 Object；如果在 `prefix` 设置为 `fun/` 的基础上，将 `delimiter` 设置为正斜线（`/`），
+    /// 则返回 `fun/test.jpg` 和 `fun/movie/`。
+    pub prefix: Option<String>,
+
+    /// 指定是否在返回结果中包含 `owner` 信息
+    pub fetch_owner: Option<bool>,
+}
+
 impl crate::oss::Client {
     fn build_put_bucket_request(&self, bucket_name: &str, config: &PutBucketConfiguration, options: &Option<PutBucketOptions>) -> ClientResult<RequestBuilder> {
         let xml = config.to_xml()?;
@@ -502,6 +654,38 @@ impl crate::oss::Client {
             }
             if let Some(oss_resource_group_id) = &opt.resource_group_id {
                 request = request.add_header("x-oss-resource-group-id", oss_resource_group_id)
+            }
+        }
+
+        request
+    }
+
+    fn build_list_objects_request(&self, options: &Option<ListObjectOptions>) -> RequestBuilder {
+        let mut request = RequestBuilder::new().method(RequestMethod::Get).add_query("list-type", "2");
+
+        if let Some(options) = options {
+            if let Some(s) = &options.delimiter {
+                request = request.add_query("delimiter", s);
+            }
+
+            if let Some(s) = &options.prefix {
+                request = request.add_query("prefix", s);
+            }
+
+            if let Some(s) = &options.max_keys {
+                request = request.add_query("max-keys", s.to_string());
+            }
+
+            if let Some(s) = &options.start_after {
+                request = request.add_query("start-after", s);
+            }
+
+            if let Some(s) = &options.continuation_token {
+                request = request.add_query("continuation-token", s);
+            }
+
+            if let Some(b) = &options.fetch_owner {
+                request = request.add_query("fetch-owner", b.to_string());
             }
         }
 
@@ -571,9 +755,7 @@ impl crate::oss::Client {
     /// Delte a bucket. Only non-empty bucket can be deleted
     ///
     pub async fn delete_bucket<S: AsRef<str>>(&self, bucket_name: S) -> ClientResult<()> {
-        let request_builder = RequestBuilder::new()
-            .method(RequestMethod::Delete)
-            .bucket(bucket_name.as_ref());
+        let request_builder = RequestBuilder::new().method(RequestMethod::Delete).bucket(bucket_name.as_ref());
 
         self.do_request(request_builder).await?;
 
@@ -623,6 +805,17 @@ impl crate::oss::Client {
     }
 
     ///
+    /// List objects in a bucket
+    ///
+    pub async fn list_objects<S: AsRef<str>>(&self, bucket_name: S, options: Option<ListObjectOptions>) -> ClientResult<ListObjectsResult> {
+        let request = self.build_list_objects_request(&options).bucket(bucket_name);
+
+        let content = self.do_request(request).await?;
+
+        ListObjectsResult::from_xml(&content)
+    }
+
+    ///
     /// With `blocking` feature enabled
     ///
     #[cfg(feature = "blocking")]
@@ -661,9 +854,7 @@ impl crate::oss::Client {
     #[cfg(feature = "blocking")]
     #[cfg_attr(docsrs, doc(cfg(feature = "blocking")))]
     pub fn delete_bucket_sync<S: AsRef<str>>(&self, bucket_name: S) -> ClientResult<()> {
-        let request_builder = RequestBuilder::new()
-            .method(RequestMethod::Delete)
-            .bucket(bucket_name.as_ref());
+        let request_builder = RequestBuilder::new().method(RequestMethod::Delete).bucket(bucket_name.as_ref());
 
         self.do_request_sync(request_builder)?;
 
@@ -723,7 +914,10 @@ mod test_bucket {
 
     use log::debug;
 
-    use crate::{bucket::ListBucketsOptions, common::{Acl, TransferAcceleration}};
+    use crate::{
+        bucket::{ListBucketsOptions, ListObjectOptions},
+        common::{Acl, TransferAcceleration},
+    };
 
     static INIT: Once = Once::new();
 
@@ -777,6 +971,8 @@ mod test_bucket {
 
         let bucket = &result.buckets[0];
         assert!(!bucket.name.is_empty());
+
+        debug!("{:?}", result);
     }
 
     #[tokio::test]
@@ -898,14 +1094,47 @@ mod test_bucket {
         let stat = response.unwrap();
         debug!("{:?}", stat);
     }
+
+    #[tokio::test]
+    async fn test_list_objects_1() {
+        setup();
+
+        let client = crate::oss::Client::from_env();
+
+        let response = client.list_objects("mi-dev-public", None).await;
+        assert!(response.is_ok());
+
+        let result = response.unwrap();
+        debug!("{:?}", result);
+    }
+
+    #[tokio::test]
+    async fn test_list_objects_2() {
+        setup();
+
+        let client = crate::oss::Client::from_env();
+
+        let options = ListObjectOptions {
+            delimiter: Some("/".to_string()),
+            prefix: Some("yuanyu-test/".to_string()),
+            fetch_owner: Some(true),
+            ..Default::default()
+        };
+
+        let response = client.list_objects("mi-dev-public", Some(options)).await;
+        assert!(response.is_ok());
+
+        let result = response.unwrap();
+        debug!("{:?}", result);
+    }
 }
 
 #[cfg(all(test, feature = "blocking"))]
 mod test_bucket_sync {
     use crate::bucket::PutBucketConfiguration;
-    use std::sync::Once;
     use crate::common::Acl;
     use crate::common::TransferAcceleration;
+    use std::sync::Once;
 
     static INIT: Once = Once::new();
 
@@ -978,7 +1207,6 @@ mod test_bucket_sync {
         let location = response.unwrap();
         assert_eq!("oss-cn-beijing", &location);
     }
-
 }
 
 #[cfg(test)]
