@@ -65,7 +65,7 @@ impl ObjectOperations for Client {
     async fn create_folder<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<PutObjectOptions>) -> ClientResult<PutObjectResult>
     where
         S1: AsRef<str> + Send,
-        S2: AsRef<str> + Send
+        S2: AsRef<str> + Send,
     {
         let bucket_name = bucket_name.as_ref();
         let object_key = object_key.as_ref();
@@ -157,13 +157,7 @@ mod test_object_async {
 
         let client = Client::from_env();
 
-        let result = client
-            .create_folder(
-                "yuanyq",
-                "rust-sdk-test/test-folder/",
-                None,
-            )
-            .await;
+        let result = client.create_folder("yuanyq", "rust-sdk-test/test-folder/", None).await;
 
         log::debug!("{:?}", result);
 

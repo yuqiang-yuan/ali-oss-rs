@@ -118,10 +118,7 @@ impl BucketDetail {
         loop {
             match reader.read_event()? {
                 Event::Eof => break,
-                Event::Start(e) => match e.local_name().as_ref() {
-                    b"Bucket" => bucket_detail = Self::from_xml_reader(&mut reader)?,
-                    _ => {}
-                },
+                Event::Start(t) if t.local_name().as_ref() == b"Bucket" => bucket_detail = Self::from_xml_reader(&mut reader)?,
                 Event::End(_) => {
                     current_tag.clear();
                 }

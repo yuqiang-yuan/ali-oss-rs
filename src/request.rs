@@ -197,11 +197,7 @@ impl RequestBuilder {
                 format!(
                     "/{}/{}",
                     urlencoding::encode(&self.bucket_name),
-                    self.object_key
-                        .split("/")
-                        .map(|s| urlencoding::encode(s))
-                        .collect::<Vec<_>>()
-                        .join("/")
+                    self.object_key.split("/").map(|s| urlencoding::encode(s)).collect::<Vec<_>>().join("/")
                 )
             }
         }

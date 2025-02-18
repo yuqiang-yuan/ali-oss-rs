@@ -99,12 +99,12 @@ pub(crate) fn validate_bucket_name(name: &str) -> bool {
 
 /// object key for regular file
 pub(crate) fn validate_object_key(key: &str) -> bool {
-    key.len() >= 1 && key.len() <= 1023 && !key.starts_with("/") && !key.starts_with("\\") && !key.ends_with("/") && !key.ends_with("\\")
+    !key.is_empty() && key.len() <= 1023 && !key.starts_with("/") && !key.starts_with("\\") && !key.ends_with("/") && !key.ends_with("\\")
 }
 
 /// object key for folder
 pub(crate) fn validate_folder_object_key(key: &str) -> bool {
-    key.len() >= 1 && key.len() <= 1023 && !key.starts_with("/") && !key.starts_with("\\") && key.ends_with("/")
+    !key.is_empty() && key.len() <= 1023 && !key.starts_with("/") && !key.starts_with("\\") && key.ends_with("/")
 }
 
 /// Validate oss tagging key and value
@@ -115,12 +115,12 @@ pub(crate) fn validate_tag(s: &str) -> bool {
 
 /// Tagging key length must between [1, 128]
 pub(crate) fn validate_tag_key(key: &str) -> bool {
-    key.len() >= 1 && key.len() <= 128 && validate_tag(key)
+    !key.is_empty() && key.len() <= 128 && validate_tag(key)
 }
 
 /// Tagging value length must between [1, 256]
 pub(crate) fn validate_tag_value(value: &str) -> bool {
-    value.len() >= 1 && value.len() <= 256 && validate_tag(value)
+    !value.is_empty() && value.len() <= 256 && validate_tag(value)
 }
 
 /// Starts with `x-oss-meta-` and only supports ascii alphabets or numbers or hyphen (`-`)

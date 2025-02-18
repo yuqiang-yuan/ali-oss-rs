@@ -7,136 +7,136 @@ use crate::{
     util::{validate_folder_object_key, validate_meta_key, validate_object_key, validate_tag_key, validate_tag_value},
 };
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub enum CacheControl {
-    NoCache,
-    NoStore,
-    Private,
-    MaxAge(u32),
-}
+// #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+// #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+// pub enum CacheControl {
+//     NoCache,
+//     NoStore,
+//     Private,
+//     MaxAge(u32),
+// }
 
-impl CacheControl {
-    pub fn to_string(&self) -> String {
-        match self {
-            CacheControl::NoCache => "no-cache".to_string(),
-            CacheControl::NoStore => "no-store".to_string(),
-            CacheControl::Private => "private".to_string(),
-            CacheControl::MaxAge(age) => format!("max-age={}", age),
-        }
-    }
-}
+// impl CacheControl {
+//     pub fn to_string(&self) -> String {
+//         match self {
+//             CacheControl::NoCache => "no-cache".to_string(),
+//             CacheControl::NoStore => "no-store".to_string(),
+//             CacheControl::Private => "private".to_string(),
+//             CacheControl::MaxAge(age) => format!("max-age={}", age),
+//         }
+//     }
+// }
 
-impl TryFrom<&str> for CacheControl {
-    type Error = ClientError;
+// impl TryFrom<&str> for CacheControl {
+//     type Error = ClientError;
 
-    /// Try to parse a CacheControl from a string.
-    ///
-    /// Acceptable values are:
-    ///
-    /// - "no-cache"
-    /// - "no-store"
-    /// - "private"
-    /// - "max-age=<seconds>". which `seconds` is a positive integer. for example: `max-age=3600`.
-    ///
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        match value {
-            "no-cache" => Ok(CacheControl::NoCache),
-            "no-store" => Ok(CacheControl::NoStore),
-            "private" => Ok(CacheControl::Private),
-            s if s.starts_with("max-age=") => {
-                if let Some(age) = s[8..].parse::<u32>().ok() {
-                    Ok(CacheControl::MaxAge(age))
-                } else {
-                    Err(ClientError::Error(format!("invalid cache control value: {}", value)))
-                }
-            }
-            _ => Err(ClientError::Error(format!("invalid cache control value: {}", value))),
-        }
-    }
-}
+//     /// Try to parse a CacheControl from a string.
+//     ///
+//     /// Acceptable values are:
+//     ///
+//     /// - "no-cache"
+//     /// - "no-store"
+//     /// - "private"
+//     /// - "max-age=<seconds>". which `seconds` is a positive integer. for example: `max-age=3600`.
+//     ///
+//     fn try_from(value: &str) -> Result<Self, Self::Error> {
+//         match value {
+//             "no-cache" => Ok(CacheControl::NoCache),
+//             "no-store" => Ok(CacheControl::NoStore),
+//             "private" => Ok(CacheControl::Private),
+//             s if s.starts_with("max-age=") => {
+//                 if let Some(age) = s[8..].parse::<u32>().ok() {
+//                     Ok(CacheControl::MaxAge(age))
+//                 } else {
+//                     Err(ClientError::Error(format!("invalid cache control value: {}", value)))
+//                 }
+//             }
+//             _ => Err(ClientError::Error(format!("invalid cache control value: {}", value))),
+//         }
+//     }
+// }
 
-impl TryFrom<&String> for CacheControl {
-    type Error = ClientError;
+// impl TryFrom<&String> for CacheControl {
+//     type Error = ClientError;
 
-    fn try_from(value: &String) -> Result<Self, Self::Error> {
-        Self::try_from(value.as_str())
-    }
-}
+//     fn try_from(value: &String) -> Result<Self, Self::Error> {
+//         Self::try_from(value.as_str())
+//     }
+// }
 
-impl TryFrom<String> for CacheControl {
-    type Error = ClientError;
+// impl TryFrom<String> for CacheControl {
+//     type Error = ClientError;
 
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        Self::try_from(value.as_str())
-    }
-}
+//     fn try_from(value: String) -> Result<Self, Self::Error> {
+//         Self::try_from(value.as_str())
+//     }
+// }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ContentDisposition {
-    Inline,
-    Attachment,
-    AttachmentWithFilename(String),
-}
+// #[derive(Debug, Clone, PartialEq, Eq)]
+// pub enum ContentDisposition {
+//     Inline,
+//     Attachment,
+//     AttachmentWithFilename(String),
+// }
 
-impl ContentDisposition {
-    pub fn to_string(&self) -> String {
-        match self {
-            ContentDisposition::Inline => "inline".to_string(),
-            ContentDisposition::Attachment => "attachment".to_string(),
-            ContentDisposition::AttachmentWithFilename(filename) => format!(
-                "attachment; filename=\"{}\";filename*=UTF-8''{}",
-                urlencoding::encode(filename),
-                urlencoding::encode(filename)
-            ),
-        }
-    }
-}
+// impl ContentDisposition {
+//     pub fn to_string(&self) -> String {
+//         match self {
+//             ContentDisposition::Inline => "inline".to_string(),
+//             ContentDisposition::Attachment => "attachment".to_string(),
+//             ContentDisposition::AttachmentWithFilename(filename) => format!(
+//                 "attachment; filename=\"{}\";filename*=UTF-8''{}",
+//                 urlencoding::encode(filename),
+//                 urlencoding::encode(filename)
+//             ),
+//         }
+//     }
+// }
 
-impl TryFrom<&str> for ContentDisposition {
-    type Error = ClientError;
+// impl TryFrom<&str> for ContentDisposition {
+//     type Error = ClientError;
 
-    /// Try to parse a ContentDisposition from a string.
-    ///
-    /// Acceptable values are:
-    ///
-    /// - "inline"
-    /// - "attachment"
-    /// - "attachment; filename=\"filename\"". for example: `attachment;filename=\"%E4%B8%AD%20abc.txt\"`. which `filename` is encoded using UTF-8 (like `encodeURIComponent` in javascript).
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        let regex = regex::RegexBuilder::new(r#"^attachment;\s*filename\s*=\s*"(.+)""#)
-            .case_insensitive(true)
-            .build()
-            .unwrap();
+//     /// Try to parse a ContentDisposition from a string.
+//     ///
+//     /// Acceptable values are:
+//     ///
+//     /// - "inline"
+//     /// - "attachment"
+//     /// - "attachment; filename=\"filename\"". for example: `attachment;filename=\"%E4%B8%AD%20abc.txt\"`. which `filename` is encoded using UTF-8 (like `encodeURIComponent` in javascript).
+//     fn try_from(value: &str) -> Result<Self, Self::Error> {
+//         let regex = regex::RegexBuilder::new(r#"^attachment;\s*filename\s*=\s*"(.+)""#)
+//             .case_insensitive(true)
+//             .build()
+//             .unwrap();
 
-        match value.to_lowercase().as_str() {
-            "inline" => Ok(ContentDisposition::Inline),
-            "attachment" => Ok(ContentDisposition::Attachment),
-            s if regex.is_match(s) => {
-                let captures = regex.captures(value).unwrap();
-                let filename = captures.get(1).unwrap().as_str();
-                Ok(ContentDisposition::AttachmentWithFilename(urlencoding::decode(filename)?.to_string()))
-            }
-            _ => Err(ClientError::Error(format!("invalid content disposition: {}", value))),
-        }
-    }
-}
+//         match value.to_lowercase().as_str() {
+//             "inline" => Ok(ContentDisposition::Inline),
+//             "attachment" => Ok(ContentDisposition::Attachment),
+//             s if regex.is_match(s) => {
+//                 let captures = regex.captures(value).unwrap();
+//                 let filename = captures.get(1).unwrap().as_str();
+//                 Ok(ContentDisposition::AttachmentWithFilename(urlencoding::decode(filename)?.to_string()))
+//             }
+//             _ => Err(ClientError::Error(format!("invalid content disposition: {}", value))),
+//         }
+//     }
+// }
 
-impl TryFrom<&String> for ContentDisposition {
-    type Error = ClientError;
+// impl TryFrom<&String> for ContentDisposition {
+//     type Error = ClientError;
 
-    fn try_from(value: &String) -> Result<Self, Self::Error> {
-        Self::try_from(value.as_str())
-    }
-}
+//     fn try_from(value: &String) -> Result<Self, Self::Error> {
+//         Self::try_from(value.as_str())
+//     }
+// }
 
-impl TryFrom<String> for ContentDisposition {
-    type Error = ClientError;
+// impl TryFrom<String> for ContentDisposition {
+//     type Error = ClientError;
 
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        Self::try_from(&value)
-    }
-}
+//     fn try_from(value: String) -> Result<Self, Self::Error> {
+//         Self::try_from(&value)
+//     }
+// }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -350,11 +350,11 @@ pub(crate) fn build_put_object_request(
 
     if let Some(options) = options {
         if let Some(s) = &options.cache_control {
-            request = request.add_header("cache-control", s.to_string());
+            request = request.add_header("cache-control", s);
         }
 
         if let Some(s) = &options.content_disposition {
-            request = request.add_header("content-disposition", s.to_string());
+            request = request.add_header("content-disposition", s);
         }
 
         if let Some(enc) = &options.content_encoding {
@@ -441,35 +441,5 @@ impl PutObjectResult {
             hash_crc64ecma,
             version_id,
         }
-    }
-}
-
-#[cfg(test)]
-#[allow(unused_imports)]
-mod test_object_common {
-    use crate::object_common::{CacheControl, ContentDisposition};
-
-    #[cfg(all(test, feature = "serde"))]
-    fn test_cache_control() {
-        let cache_control = CacheControl::MaxAge(3600);
-        assert_eq!(cache_control, CacheControl::MaxAge(3600));
-        println!("{}", serde_json::to_string(&cache_control).unwrap());
-
-        let cache_control = CacheControl::NoCache;
-        println!("{}", serde_json::to_string(&cache_control).unwrap());
-    }
-
-    #[test]
-    fn test_content_disposition_1() {
-        let s = "attachment; filename=\"example.txt\"";
-        let content_disposition = ContentDisposition::try_from(s).unwrap();
-        assert_eq!(content_disposition, ContentDisposition::AttachmentWithFilename("example.txt".to_string()));
-    }
-
-    #[test]
-    fn test_content_disposition_2() {
-        let s = "attachment;filename = \"%E4%B8%AD%20abc.txt\"";
-        let content_disposition = ContentDisposition::try_from(s).unwrap();
-        assert_eq!(content_disposition, ContentDisposition::AttachmentWithFilename("中 abc.txt".to_string()));
     }
 }
