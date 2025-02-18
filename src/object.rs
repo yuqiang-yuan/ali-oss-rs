@@ -88,7 +88,7 @@ impl ObjectOperations for Client {
 mod test_object_async {
     use std::{collections::HashMap, sync::Once};
 
-    use crate::{object::ObjectOperations, object_common::PutObjectOptions, Client};
+    use crate::{common::StorageClass, object::ObjectOperations, object_common::PutObjectOptions, Client};
 
     static INIT: Once = Once::new();
 
@@ -142,6 +142,32 @@ mod test_object_async {
                 "yuanyq",
                 "rust-sdk-test/云教材发布与管理系统-用户手册.pdf",
                 "/home/yuanyq/Downloads/云教材发布与管理系统-用户手册.pdf",
+                Some(options),
+            )
+            .await;
+
+        log::debug!("{:?}", result);
+
+        assert!(result.is_ok());
+    }
+
+    /// Test upload file with non-default storage class
+    #[tokio::test]
+    async fn test_upload_file_3() {
+        setup();
+
+        let client = Client::from_env();
+
+        let options = PutObjectOptions {
+            storage_class: Some(StorageClass::Archive),
+            ..Default::default()
+        };
+
+        let result = client
+            .upload_file(
+                "yuanyq",
+                "rust-sdk-test/archived/demo.mp4",
+                "/home/yuanyq/Pictures/demo.mp4",
                 Some(options),
             )
             .await;
