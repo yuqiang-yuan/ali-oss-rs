@@ -9,9 +9,10 @@ use crate::{
 };
 
 pub mod bucket;
+pub mod object;
 
 pub struct Client {
-    pub access_key_id: String,
+    access_key_id: String,
     access_key_secret: String,
     pub region: String,
     pub endpoint: String,
@@ -169,7 +170,8 @@ impl Client {
             RequestBody::Text(text) => req_builder.body(text),
             RequestBody::Bytes(bytes) => req_builder.body(bytes),
             RequestBody::File(path) => {
-                todo!("Implement file upload")
+                let file = File::open(path)?;
+                req_builder.body(file)
             }
         };
 
@@ -181,6 +183,7 @@ impl Client {
 
         // 阿里云 OSS API 中的响应头的值都是可表示的字符串
         for (key, value) in response.headers() {
+            log::debug!("<< headers: {}: {}", key, value.to_str().unwrap_or("ERROR-PARSE-HEADER-VALUE"));
             response_headers.insert(key.to_string(), value.to_str().unwrap_or("").to_string());
         }
 

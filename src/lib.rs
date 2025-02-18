@@ -28,7 +28,7 @@ use url::Url;
 use util::hmac_sha256;
 
 pub struct Client {
-    pub access_key_id: String,
+    access_key_id: String,
     access_key_secret: String,
     pub region: String,
     pub endpoint: String,
@@ -186,7 +186,7 @@ impl Client {
             RequestBody::Empty => req_builder,
             RequestBody::Text(text) => req_builder.body(text),
             RequestBody::Bytes(bytes) => req_builder.body(bytes),
-            RequestBody::File(path) => req_builder.body(reqwest::Body::from(tokio::fs::File::open(path).await?)),
+            RequestBody::File(path) => req_builder.body(tokio::fs::File::open(path).await?),
         };
 
         let req = req_builder.build()?;
