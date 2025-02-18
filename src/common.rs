@@ -37,7 +37,7 @@ impl Owner {
                     if e.local_name().as_ref() == b"Owner" {
                         break;
                     }
-                },
+                }
 
                 _ => {}
             }

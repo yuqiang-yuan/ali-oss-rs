@@ -1,31 +1,14 @@
-#![doc = include_str!("../README.md")]
-pub mod bucket;
-pub mod bucket_common;
-pub mod common;
-pub mod error;
-pub mod object;
-pub mod object_common;
-pub mod request;
+use std::{collections::HashMap, fs::File, path::Path, str::FromStr};
 
-#[cfg(feature = "blocking")]
-pub mod blocking;
-
-mod util;
-
-use std::{collections::HashMap, pin::Pin, str::FromStr};
-
-use async_trait::async_trait;
-use bytes::Bytes;
-use error::{ClientError, ClientResult, ErrorResponse};
-use futures::{Stream, StreamExt};
-use request::RequestBody;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
-
-#[cfg(feature = "serde")]
-pub use serde;
-
 use url::Url;
-use util::hmac_sha256;
+
+use crate::{
+    error::{ClientError, ClientResult, ErrorResponse},
+    hmac_sha256, util, RequestBody,
+};
+
+pub mod bucket;
 
 pub struct Client {
     pub access_key_id: String,
@@ -33,8 +16,7 @@ pub struct Client {
     pub region: String,
     pub endpoint: String,
     pub scheme: String,
-
-    http_client: reqwest::Client,
+    blocking_http_client: reqwest::blocking::Client,
 }
 
 impl Client {
@@ -99,7 +81,7 @@ impl Client {
             region: region.as_ref().to_string(),
             endpoint: lc_endpoint,
             scheme,
-            http_client: reqwest::Client::new(),
+            blocking_http_client: reqwest::blocking::Client::new(),
         }
     }
 
@@ -118,7 +100,7 @@ impl Client {
     /// So I put them in this method to prevent re-generating
     /// and better debuging output.
     /// And add some default headers to the request builder.
-    pub(crate) async fn do_request<T>(&self, request_builder: crate::request::RequestBuilder) -> ClientResult<(HashMap<String, String>, T)>
+    pub(crate) fn do_request<T>(&self, request_builder: crate::request::RequestBuilder) -> ClientResult<(HashMap<String, String>, T)>
     where
         T: FromResponse,
     {
@@ -177,7 +159,7 @@ impl Client {
         log::debug!("full url: {}", full_url);
 
         let mut req_builder = self
-            .http_client
+            .blocking_http_client
             .request(request_builder.method.into(), Url::parse(&full_url)?)
             .headers(header_map);
 
@@ -186,25 +168,26 @@ impl Client {
             RequestBody::Empty => req_builder,
             RequestBody::Text(text) => req_builder.body(text),
             RequestBody::Bytes(bytes) => req_builder.body(bytes),
-            RequestBody::File(path) => req_builder.body(reqwest::Body::from(tokio::fs::File::open(path).await?)),
+            RequestBody::File(path) => {
+                todo!("Implement file upload")
+            }
         };
 
         let req = req_builder.build()?;
 
-        let response = self.http_client.execute(req).await?;
+        let response = self.blocking_http_client.execute(req)?;
 
         let mut response_headers = HashMap::new();
 
         // 阿里云 OSS API 中的响应头的值都是可表示的字符串
         for (key, value) in response.headers() {
-            log::debug!("<< headers: {}: {}", key, value.to_str().unwrap_or("ERROR-PARSE-HEADER-VALUE"));
             response_headers.insert(key.to_string(), value.to_str().unwrap_or("").to_string());
         }
 
         if !response.status().is_success() {
             let status = response.status();
 
-            match response.text().await {
+            match response.text() {
                 Ok(s) => {
                     log::error!("{}", s);
                     if s.is_empty() {
@@ -217,39 +200,48 @@ impl Client {
                 Err(_) => Err(ClientError::Error(format!("API call failed with status code: {}", status.as_str()))),
             }
         } else {
-            Ok((response_headers, T::from_response(response).await?))
+            Ok((response_headers, T::from_response(response)?))
         }
     }
 }
 
-#[async_trait]
 pub(crate) trait FromResponse: Sized {
-    async fn from_response(response: reqwest::Response) -> ClientResult<Self>;
+    fn from_response(response: reqwest::blocking::Response) -> ClientResult<Self>;
 }
 
-#[async_trait]
 impl FromResponse for String {
-    async fn from_response(response: reqwest::Response) -> ClientResult<Self> {
-        let text = response.text().await?;
+    fn from_response(response: reqwest::blocking::Response) -> ClientResult<Self> {
+        let text = response.text()?;
         Ok(text)
     }
 }
 
-#[async_trait]
-impl FromResponse for () {
-    async fn from_response(_: reqwest::Response) -> ClientResult<Self> {
+impl FromResponse for Vec<u8> {
+    fn from_response(response: reqwest::blocking::Response) -> ClientResult<Self> {
+        let bytes = response.bytes()?;
+        Ok(bytes.to_vec())
+    }
+}
+
+/// This is a wrapper around `reqwest::blocking::Response` that provides a convenient way to access the response body as bytes.
+pub(crate) struct BytesBody(reqwest::blocking::Response);
+
+impl BytesBody {
+    pub fn save_to_file<P: AsRef<Path>>(&mut self, path: P) -> ClientResult<()> {
+        let mut file = File::create(path)?;
+        self.0.copy_to(&mut file)?;
         Ok(())
     }
 }
 
-// Define a type alias for the byte stream
-pub(crate) type ByteStream = Pin<Box<dyn Stream<Item = Result<Bytes, reqwest::Error>> + Send>>;
+impl FromResponse for BytesBody {
+    fn from_response(response: reqwest::blocking::Response) -> ClientResult<Self> {
+        Ok(Self(response))
+    }
+}
 
-#[async_trait]
-impl FromResponse for ByteStream {
-    async fn from_response(response: reqwest::Response) -> ClientResult<Self> {
-        // Convert the response body into a byte stream
-        let stream = response.bytes_stream();
-        Ok(Box::pin(stream))
+impl FromResponse for () {
+    fn from_response(_: reqwest::blocking::Response) -> ClientResult<Self> {
+        Ok(())
     }
 }
