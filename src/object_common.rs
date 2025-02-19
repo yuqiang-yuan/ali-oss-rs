@@ -352,6 +352,9 @@ pub struct GetObjectOptions {
 
     /// Add `Content-Encoding` to response header
     pub response_content_encoding: Option<ContentEncoding>,
+
+    /// The version to retreive
+    pub version_id: Option<String>,
 }
 
 pub struct GetObjectOptionsBuilder {
@@ -366,6 +369,7 @@ pub struct GetObjectOptionsBuilder {
     response_cache_control: Option<String>,
     response_content_disposition: Option<String>,
     response_content_encoding: Option<ContentEncoding>,
+    version_id: Option<String>
 }
 
 impl GetObjectOptionsBuilder {
@@ -382,6 +386,7 @@ impl GetObjectOptionsBuilder {
             response_cache_control: None,
             response_content_disposition: None,
             response_content_encoding: None,
+            version_id: None,
         }
     }
 
@@ -440,6 +445,11 @@ impl GetObjectOptionsBuilder {
         self
     }
 
+    pub fn version_id(mut self, version_id: impl Into<String>) -> Self {
+        self.version_id = Some(version_id.into());
+        self
+    }
+
     pub fn build(self) -> GetObjectOptions {
         GetObjectOptions {
             range: self.range,
@@ -453,6 +463,7 @@ impl GetObjectOptionsBuilder {
             response_cache_control: self.response_cache_control,
             response_content_disposition: self.response_content_disposition,
             response_content_encoding: self.response_content_encoding,
+            version_id: self.version_id,
         }
     }
 }
@@ -596,6 +607,50 @@ pub(crate) fn build_put_object_request(
     Ok(request)
 }
 
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+pub struct GetObjectMetadataOptions {
+    pub version_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+pub struct ObjectMetadata {
+    pub content_length: u64,
+    pub etag: Option<String>,
+    pub hash_crc64ecma: Option<String>,
+
+    /// Object 通过生命周期规则转储为冷归档或者深度冷归档存储类型的时间。
+    pub transition_time: Option<String>,
+
+    /// Object 的最后一次访问时间。时间格式为 HTTP 1.1 协议中规定的 GMT 时间。
+    /// 开启访问跟踪时，该字段的值会随着文件被访问的时间持续更新。
+    /// 如果开启后关闭了访问跟踪，该字段的值保留为上一次最后更新的值。
+    /// 示例： `Tue, 30 Mar 2021 06:07:48 GMT`
+    pub last_access_time: Option<String>,
+
+    /// 时间格式为 HTTP 1.1 协议中规定的 GMT 时间。
+    pub last_modified: Option<String>,
+
+    pub version_id: Option<String>,
+}
+
+impl ObjectMetadata {
+    pub fn from_headers(headers: &HashMap<String, String>) -> Self {
+        Self {
+            content_length: headers.get("content-length").map(|s| s.as_str()).unwrap_or("0").parse().unwrap_or(0),
+            etag: headers.get("etag").map(|v| v.to_string()),
+            hash_crc64ecma: headers.get("x-oss-hash-crc64ecma").map(|v| v.to_string()),
+            transition_time: headers.get("x-oss-transition-time").map(|v| v.to_string()),
+            last_access_time: headers.get("x-oss-last-access-time").map(|v| v.to_string()),
+            last_modified: headers.get("last-modified").map(|v| v.to_string()),
+            version_id: headers.get("x-oss-version-id").map(|v| v.to_string()),
+        }
+    }
+}
+
 pub(crate) fn build_get_object_request(bucket_name: &str, object_key: &str, options: &Option<GetObjectOptions>) -> RequestBuilder {
     let mut request = RequestBuilder::new().method(RequestMethod::Get).bucket(bucket_name).object(object_key);
 
@@ -642,6 +697,10 @@ pub(crate) fn build_get_object_request(bucket_name: &str, object_key: &str, opti
 
         if let Some(ce) = options.response_content_encoding {
             request = request.add_query("response-content-encoding", ce.as_str());
+        }
+
+        if let Some(s) = &options.version_id {
+            request = request.add_query("versionId", s);
         }
     }
 

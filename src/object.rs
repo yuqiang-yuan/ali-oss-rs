@@ -5,10 +5,7 @@ use futures::TryStreamExt;
 use tokio::io::AsyncWriteExt;
 
 use crate::{
-    error::{ClientError, ClientResult},
-    object_common::{build_get_object_request, build_put_object_request, GetObjectOptions, PutObjectOptions, PutObjectResult},
-    util::validate_path,
-    ByteStream, Client,
+    error::{ClientError, ClientResult}, object_common::{build_get_object_request, build_put_object_request, GetObjectMetadataOptions, GetObjectOptions, ObjectMetadata, PutObjectOptions, PutObjectResult}, request::{RequestBuilder, RequestMethod}, util::validate_path, ByteStream, Client
 };
 
 #[async_trait]
@@ -38,6 +35,13 @@ pub trait ObjectOperations {
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send;
+
+    /// Get object metadata
+    async fn get_object_metadata<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<GetObjectMetadataOptions>) -> ClientResult<ObjectMetadata>
+    where
+        S1: AsRef<str> + Send,
+        S2: AsRef<str> + Send;
+
 }
 
 #[async_trait]
@@ -138,6 +142,31 @@ impl ObjectOperations for Client {
         let (headers, _) = self.do_request::<()>(request).await?;
 
         Ok(PutObjectResult::from_headers(&headers))
+    }
+
+    /// Get object metadata
+    async fn get_object_metadata<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<GetObjectMetadataOptions>) -> ClientResult<ObjectMetadata>
+    where
+        S1: AsRef<str> + Send,
+        S2: AsRef<str> + Send
+    {
+        let bucket_name = bucket_name.as_ref();
+        let object_key = object_key.as_ref();
+
+        let mut request = RequestBuilder::new()
+            .method(RequestMethod::Head)
+            .bucket(bucket_name)
+            .object(object_key)
+            .add_query("objectMeta", "");
+
+        if let Some(options) = &options {
+            if let Some(s) = &options.version_id {
+                request = request.add_query("versionId", s);
+            }
+        }
+
+        let (headers, _) = self.do_request::<()>(request).await?;
+        Ok(ObjectMetadata::from_headers(&headers))
     }
 }
 
@@ -301,5 +330,22 @@ mod test_object_async {
 
             log::debug!("{}", result.unwrap_err());
         }
+    }
+
+    #[tokio::test]
+    async fn test_get_object_metadata() {
+        setup();
+        let client = Client::from_env();
+
+        let result = client.get_object_metadata("yuanyq", "rust-sdk-test/Oracle_VirtualBox_Extension_Pack-7.1.4.vbox-extpack", None).await;
+
+        assert!(result.is_ok());
+
+        let meta = result.unwrap();
+
+        assert_eq!(22966826, meta.content_length);
+        assert_eq!(Some("\"B752E1A13502E231AC4AA0E1D91F887C\"".to_string()), meta.etag);
+        assert_eq!(Some("7873641174252289613".to_string()), meta.hash_crc64ecma);
+        assert_eq!(Some("Tue, 18 Feb 2025 15:03:23 GMT".to_string()), meta.last_modified);
     }
 }
