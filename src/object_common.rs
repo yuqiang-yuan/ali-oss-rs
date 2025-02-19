@@ -369,7 +369,7 @@ pub struct GetObjectOptionsBuilder {
     response_cache_control: Option<String>,
     response_content_disposition: Option<String>,
     response_content_encoding: Option<ContentEncoding>,
-    version_id: Option<String>
+    version_id: Option<String>,
 }
 
 impl GetObjectOptionsBuilder {

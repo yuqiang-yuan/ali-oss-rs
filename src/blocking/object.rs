@@ -1,7 +1,12 @@
 use std::path::Path;
 
 use crate::{
-    error::{ClientError, ClientResult}, object_common::{build_get_object_request, build_put_object_request, GetObjectMetadataOptions, GetObjectOptions, ObjectMetadata, PutObjectOptions, PutObjectResult}, request::{RequestBuilder, RequestMethod}, util::validate_path
+    error::{ClientError, ClientResult},
+    object_common::{
+        build_get_object_request, build_put_object_request, GetObjectMetadataOptions, GetObjectOptions, ObjectMetadata, PutObjectOptions, PutObjectResult,
+    },
+    request::{RequestBuilder, RequestMethod},
+    util::validate_path,
 };
 
 use super::{BytesBody, Client};
@@ -122,7 +127,7 @@ impl ObjectOperations for Client {
     fn get_object_metadata<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<GetObjectMetadataOptions>) -> ClientResult<ObjectMetadata>
     where
         S1: AsRef<str>,
-        S2: AsRef<str>
+        S2: AsRef<str>,
     {
         let bucket_name = bucket_name.as_ref();
         let object_key = object_key.as_ref();

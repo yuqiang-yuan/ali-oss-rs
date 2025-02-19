@@ -5,7 +5,13 @@ use futures::TryStreamExt;
 use tokio::io::AsyncWriteExt;
 
 use crate::{
-    error::{ClientError, ClientResult}, object_common::{build_get_object_request, build_put_object_request, GetObjectMetadataOptions, GetObjectOptions, ObjectMetadata, PutObjectOptions, PutObjectResult}, request::{RequestBuilder, RequestMethod}, util::validate_path, ByteStream, Client
+    error::{ClientError, ClientResult},
+    object_common::{
+        build_get_object_request, build_put_object_request, GetObjectMetadataOptions, GetObjectOptions, ObjectMetadata, PutObjectOptions, PutObjectResult,
+    },
+    request::{RequestBuilder, RequestMethod},
+    util::validate_path,
+    ByteStream, Client,
 };
 
 #[async_trait]
@@ -41,7 +47,6 @@ pub trait ObjectOperations {
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send;
-
 }
 
 #[async_trait]
@@ -148,7 +153,7 @@ impl ObjectOperations for Client {
     async fn get_object_metadata<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<GetObjectMetadataOptions>) -> ClientResult<ObjectMetadata>
     where
         S1: AsRef<str> + Send,
-        S2: AsRef<str> + Send
+        S2: AsRef<str> + Send,
     {
         let bucket_name = bucket_name.as_ref();
         let object_key = object_key.as_ref();
@@ -337,7 +342,9 @@ mod test_object_async {
         setup();
         let client = Client::from_env();
 
-        let result = client.get_object_metadata("yuanyq", "rust-sdk-test/Oracle_VirtualBox_Extension_Pack-7.1.4.vbox-extpack", None).await;
+        let result = client
+            .get_object_metadata("yuanyq", "rust-sdk-test/Oracle_VirtualBox_Extension_Pack-7.1.4.vbox-extpack", None)
+            .await;
 
         assert!(result.is_ok());
 
