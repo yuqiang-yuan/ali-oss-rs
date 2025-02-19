@@ -1,7 +1,7 @@
 use std::{collections::HashMap, path::Path};
 
 use crate::{
-    common::{Acl, ServerSideEncryptionAlgorithm, StorageClass},
+    common::{Acl, ObjectType, ServerSideEncryptionAlgorithm, StorageClass},
     error::{ClientError, ClientResult},
     request::{RequestBuilder, RequestMethod},
     util::{validate_folder_object_key, validate_meta_key, validate_object_key, validate_tag_key, validate_tag_value},
@@ -313,7 +313,7 @@ pub struct GetObjectOptions {
     /// 如果传入的 `ETag` 和 `Object` 的 `ETag` 匹配，则返回 `304 Not Modified`。
     ///
     /// `If-Match` 和 `If-None-Match` 可以同时使用。
-    pub if_non_match: Option<String>,
+    pub if_none_match: Option<String>,
 
     /// 指定客户端的编码类型。例如：gzip
     ///
@@ -456,7 +456,7 @@ impl GetObjectOptionsBuilder {
             if_modified_since: self.if_modified_since,
             if_unmodified_since: self.if_unmodified_since,
             if_match: self.if_match,
-            if_non_match: self.if_non_match,
+            if_none_match: self.if_non_match,
             accept_encoding: self.accept_encoding,
             response_content_language: self.response_content_language,
             response_expires: self.response_expires,
@@ -617,7 +617,80 @@ pub struct GetObjectMetadataOptions {
 #[derive(Debug, Clone, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+pub struct HeadObjectOptions {
+    pub version_id: Option<String>,
+    pub if_modified_since: Option<String>,
+    pub if_unmodified_since: Option<String>,
+    pub if_match: Option<String>,
+    pub if_none_match: Option<String>,
+}
+
+pub struct HeadObjectOptionsBuilder {
+    version_id: Option<String>,
+    if_modified_since: Option<String>,
+    if_unmodified_since: Option<String>,
+    if_match: Option<String>,
+    if_none_match: Option<String>,
+}
+
+impl HeadObjectOptionsBuilder {
+    pub fn new() -> Self {
+        Self {
+            version_id: None,
+            if_modified_since: None,
+            if_unmodified_since: None,
+            if_match: None,
+            if_none_match: None,
+        }
+    }
+
+    pub fn version_id(mut self, version_id: impl Into<String>) -> Self {
+        self.version_id = Some(version_id.into());
+        self
+    }
+
+    pub fn if_modified_since(mut self, if_modified_since: impl Into<String>) -> Self {
+        self.if_modified_since = Some(if_modified_since.into());
+        self
+    }
+
+    pub fn if_unmodified_since(mut self, if_unmodified_since: impl Into<String>) -> Self {
+        self.if_unmodified_since = Some(if_unmodified_since.into());
+        self
+    }
+
+    pub fn if_match(mut self, if_match: impl Into<String>) -> Self {
+        self.if_match = Some(if_match.into());
+        self
+    }
+
+    pub fn if_none_match(mut self, if_none_match: impl Into<String>) -> Self {
+        self.if_none_match = Some(if_none_match.into());
+        self
+    }
+
+    pub fn build(self) -> HeadObjectOptions {
+        HeadObjectOptions {
+            version_id: self.version_id,
+            if_modified_since: self.if_modified_since,
+            if_unmodified_since: self.if_unmodified_since,
+            if_match: self.if_match,
+            if_none_match: self.if_none_match,
+        }
+    }
+}
+
+impl Default for HeadObjectOptionsBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
 pub struct ObjectMetadata {
+    pub request_id: String,
     pub content_length: u64,
     pub etag: Option<String>,
     pub hash_crc64ecma: Option<String>,
@@ -635,18 +708,117 @@ pub struct ObjectMetadata {
     pub last_modified: Option<String>,
 
     pub version_id: Option<String>,
+
+    pub server_side_encryption: Option<ServerSideEncryptionAlgorithm>,
+    pub server_side_encryption_key_id: Option<String>,
+    pub storage_class: Option<StorageClass>,
+    pub object_type: Option<ObjectType>,
+
+    /// 对于 `Appendable` 类型的 Object 会返回此 Header，指明下一次请求应当提供的 `position`。
+    pub next_append_position: Option<u64>,
+
+    /// 配置了生命周期规则的Bucket中Object的过期时间。
+    pub expiration: Option<String>,
+
+    /// 如果 Object 存储类型为 `Archive`、`ColdArchive` 或者 `DeepColdArchive`，
+    /// 且您已提交 Restore 请求，则响应头中会以 `x-oss-restore` 返回该 Object 的 Restore 状态，分如下几种情况：
+    ///
+    /// - 如果没有提交 Restore 或者 Restore 已经超时，则不返回该字段。
+    /// - 如果已经提交 Restore，且 Restore 没有完成，则返回的 `x-oss-restore` 值为 `ongoing-request="true"`。
+    /// - 如果已经提交 Restore，且 Restore 已经完成，则返回的 `x-oss-restore` 值为 `ongoing-request="false", expiry-date="Sun, 16 Apr 2017 08:12:33 GMT"`，其中 `expiry-date` 是 Restore 完成后 Object 进入可读状态的过期时间。
+    pub restore: Option<String>,
+
+    /// 当用户通过轻量消息队列 SMQ 创建 OSS 事件通知后，
+    /// 在进行请求 OSS 相关操作时如果有匹配的事件通知规则，
+    /// 则响应中会携带这个 Header，值为经过 Base64 编码 JSON 格式的事件通知结果。
+    pub process_status: Option<String>,
+
+    /// 当 Object 所属的 Bucket 被设置为请求者付费模式，
+    /// 且请求者不是 Bucket 的拥有者时，响应中将携带此 Header，值为 `requester`。
+    pub request_charged: Option<String>,
+
+    /// - 对于 `Normal` 类型的 Object，根据 RFC 1864 标准对消息内容（不包括Header）计算 Md5 值获得 128 比特位数字，对该数字进行 Base64 编码作为一个消息的 Content-Md5 值。
+    /// - `Multipart` 和 `Appendable` 类型的文件不会返回这个 Header。
+    pub content_md5: Option<String>,
+
+    /// 当 Object 所在的 Bucket 配置了 CORS 规则，且请求的 Origin 满足指定的 CORS 规则时会在响应中包含这个 Origin。
+    pub access_control_allow_origin: Option<String>,
+
+    /// 当 Object 所在的 Bucket 配置了 CORS 规则，且请求的 `Access-Control-Request-Method` 满足指定的CORS规则时会在响应中包含允许的 Methods。
+    pub access_control_allow_methods: Option<String>,
+
+    /// 当 Object 所在的 Bucket 配置了 CORS 规则，且请求满足 Bucket 配置的 CORS 规则时会在响应中包含 `MaxAgeSeconds`。
+    pub access_control_allow_max_age: Option<String>,
+
+    /// 当 Object 所在的 Bucket 配置了 CORS 规则，且请求满足指定的 CORS 规则时会在响应中包含这些 Headers。
+    pub access_control_allow_headers: Option<String>,
+
+    /// 表示允许访问客户端 JavaScript 程序的 headers 列表。当 Object 所在的 Bucket 配置了 CORS 规则，且请求满足指定的CORS规则时会在响应中包含 ExposeHeader。
+    pub access_control_expose_headers: Option<String>,
+
+    /// 对象关联的标签个数。仅当用户有读取标签权限时返回。
+    pub tag_count: Option<u32>,
+
+    /// `x-oss-meta-` 开头的用户自定义属性
+    pub metadata: HashMap<String, String>,
 }
 
-impl ObjectMetadata {
-    pub fn from_headers(headers: &HashMap<String, String>) -> Self {
+impl From<HashMap<String, String>> for ObjectMetadata {
+    /// Consumes the headers map and return ObjectMetadata
+    fn from(mut headers: HashMap<String, String>) -> Self {
         Self {
-            content_length: headers.get("content-length").map(|s| s.as_str()).unwrap_or("0").parse().unwrap_or(0),
-            etag: headers.get("etag").map(|v| v.to_string()),
-            hash_crc64ecma: headers.get("x-oss-hash-crc64ecma").map(|v| v.to_string()),
-            transition_time: headers.get("x-oss-transition-time").map(|v| v.to_string()),
-            last_access_time: headers.get("x-oss-last-access-time").map(|v| v.to_string()),
-            last_modified: headers.get("last-modified").map(|v| v.to_string()),
-            version_id: headers.get("x-oss-version-id").map(|v| v.to_string()),
+            request_id: headers.remove("x-oss-request-id").unwrap_or("".to_string()),
+            content_length: headers.remove("content-length").unwrap_or("0".to_string()).parse().unwrap_or(0),
+            etag: headers.remove("etag"),
+            hash_crc64ecma: headers.remove("x-oss-hash-crc64ecma"),
+            transition_time: headers.remove("x-oss-transition-time"),
+            last_access_time: headers.remove("x-oss-last-access-time"),
+            last_modified: headers.remove("last-modified"),
+            version_id: headers.remove("x-oss-version-id"),
+            server_side_encryption: if let Some(s) = headers.remove("x-oss-server-side-encryption") {
+                // Not good...
+                if let Ok(v) = s.try_into() {
+                    Some(v)
+                } else {
+                    None
+                }
+            } else {
+                None
+            },
+            server_side_encryption_key_id: headers.remove("x-oss-server-side-encryption-key-id"),
+            storage_class: if let Some(s) = headers.remove("x-oss-storage-class") {
+                if let Ok(v) = s.try_into() {
+                    Some(v)
+                } else {
+                    None
+                }
+            } else {
+                None
+            },
+            object_type: if let Some(s) = headers.remove("x-oss-object-type") {
+                if let Ok(v) = s.try_into() {
+                    Some(v)
+                } else {
+                    None
+                }
+            } else {
+                None
+            },
+            next_append_position: headers.remove("x-oss-next-append-position").map(|s| s.parse().unwrap_or(0)),
+            expiration: headers.remove("x-oss-expiration"),
+            restore: headers.remove("x-oss-restore"),
+            process_status: headers.remove("x-oss-process-status"),
+            request_charged: headers.remove("x-oss-request-charged"),
+            content_md5: headers.remove("content-md5"),
+            access_control_allow_origin: headers.remove("access-control-allow-origin"),
+            access_control_allow_methods: headers.remove("access-control-allow-methods"),
+            access_control_allow_headers: headers.remove("access-control-allow-headers"),
+            access_control_allow_max_age: headers.remove("access-control-max-age"),
+            access_control_expose_headers: headers.remove("access-control-expose-headers"),
+            tag_count: headers.remove("x-oss-tagging-count").map(|s| s.parse().unwrap_or(0)),
+
+            // CAUTION!! must be the last field to handle because `drain` consumes all the entries left in the map
+            metadata: headers.drain().filter(|(k, _)| k.starts_with("x-oss-meta-")).collect(),
         }
     }
 }
@@ -671,8 +843,8 @@ pub(crate) fn build_get_object_request(bucket_name: &str, object_key: &str, opti
             request = request.add_header("if-match", s);
         }
 
-        if let Some(s) = &options.if_non_match {
-            request = request.add_header("if-non-match", s);
+        if let Some(s) = &options.if_none_match {
+            request = request.add_header("if-none-match", s);
         }
 
         if let Some(s) = &options.accept_encoding {
@@ -697,6 +869,34 @@ pub(crate) fn build_get_object_request(bucket_name: &str, object_key: &str, opti
 
         if let Some(ce) = options.response_content_encoding {
             request = request.add_query("response-content-encoding", ce.as_str());
+        }
+
+        if let Some(s) = &options.version_id {
+            request = request.add_query("versionId", s);
+        }
+    }
+
+    request
+}
+
+pub(crate) fn build_head_object_request(bucket_name: &str, object_key: &str, options: &Option<HeadObjectOptions>) -> RequestBuilder {
+    let mut request = RequestBuilder::new().method(RequestMethod::Head).bucket(bucket_name).object(object_key);
+
+    if let Some(options) = options {
+        if let Some(s) = &options.if_modified_since {
+            request = request.add_header("if-modified-since", s);
+        }
+
+        if let Some(s) = &options.if_unmodified_since {
+            request = request.add_header("if-unmodified-since", s);
+        }
+
+        if let Some(s) = &options.if_match {
+            request = request.add_header("if-match", s);
+        }
+
+        if let Some(s) = &options.if_none_match {
+            request = request.add_header("if-none-match", s);
         }
 
         if let Some(s) = &options.version_id {

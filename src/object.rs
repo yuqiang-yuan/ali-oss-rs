@@ -7,7 +7,7 @@ use tokio::io::AsyncWriteExt;
 use crate::{
     error::{ClientError, ClientResult},
     object_common::{
-        build_get_object_request, build_put_object_request, GetObjectMetadataOptions, GetObjectOptions, ObjectMetadata, PutObjectOptions, PutObjectResult,
+        build_get_object_request, build_head_object_request, build_put_object_request, GetObjectMetadataOptions, GetObjectOptions, HeadObjectOptions, ObjectMetadata, PutObjectOptions, PutObjectResult
     },
     request::{RequestBuilder, RequestMethod},
     util::validate_path,
@@ -44,6 +44,12 @@ pub trait ObjectOperations {
 
     /// Get object metadata
     async fn get_object_metadata<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<GetObjectMetadataOptions>) -> ClientResult<ObjectMetadata>
+    where
+        S1: AsRef<str> + Send,
+        S2: AsRef<str> + Send;
+
+    /// Head object
+    async fn head_object<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<HeadObjectOptions>) -> ClientResult<ObjectMetadata>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send;
@@ -171,7 +177,22 @@ impl ObjectOperations for Client {
         }
 
         let (headers, _) = self.do_request::<()>(request).await?;
-        Ok(ObjectMetadata::from_headers(&headers))
+        Ok(ObjectMetadata::from(headers))
+    }
+
+    /// Get object metadata which is more detail than [`get_object_metadata`]
+    async fn head_object<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<HeadObjectOptions>) -> ClientResult<ObjectMetadata>
+    where
+        S1: AsRef<str> + Send,
+        S2: AsRef<str> + Send,
+    {
+        let bucket_name = bucket_name.as_ref();
+        let object_key = object_key.as_ref();
+
+        let request = build_head_object_request(bucket_name, object_key, &options);
+
+        let (headers, _) = self.do_request::<()>(request).await?;
+        Ok(ObjectMetadata::from(headers))
     }
 }
 
@@ -180,7 +201,7 @@ mod test_object_async {
     use std::{collections::HashMap, sync::Once};
 
     use crate::{
-        common::StorageClass,
+        common::{ObjectType, StorageClass},
         object::ObjectOperations,
         object_common::{GetObjectOptionsBuilder, PutObjectOptions},
         Client,
@@ -354,5 +375,26 @@ mod test_object_async {
         assert_eq!(Some("\"B752E1A13502E231AC4AA0E1D91F887C\"".to_string()), meta.etag);
         assert_eq!(Some("7873641174252289613".to_string()), meta.hash_crc64ecma);
         assert_eq!(Some("Tue, 18 Feb 2025 15:03:23 GMT".to_string()), meta.last_modified);
+    }
+
+    #[tokio::test]
+    async fn test_head_object() {
+        setup();
+        let client = Client::from_env();
+
+        let result = client
+            .head_object("yuanyq", "rust-sdk-test/Oracle_VirtualBox_Extension_Pack-7.1.4.vbox-extpack", None)
+            .await;
+
+        assert!(result.is_ok());
+
+        let meta = result.unwrap();
+
+        assert_eq!(22966826, meta.content_length);
+        assert_eq!(Some("\"B752E1A13502E231AC4AA0E1D91F887C\"".to_string()), meta.etag);
+        assert_eq!(Some("7873641174252289613".to_string()), meta.hash_crc64ecma);
+        assert_eq!(Some("Tue, 18 Feb 2025 15:03:23 GMT".to_string()), meta.last_modified);
+        assert_eq!(Some(ObjectType::Normal), meta.object_type);
+        assert_eq!(Some(StorageClass::Standard), meta.storage_class);
     }
 }
