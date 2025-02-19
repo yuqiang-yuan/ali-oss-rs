@@ -31,7 +31,7 @@ simple_logger = "5.0.0"
 
 [features]
 # Default features, using async request to call Aliyun OSS API
-default=["async", "blocking"]
+default=["async"]
 async=[]
 
 # Support synchronous request to call Aliyun OSS API

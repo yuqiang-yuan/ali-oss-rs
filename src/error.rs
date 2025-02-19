@@ -100,6 +100,9 @@ pub enum ClientError {
     ParseIntError(#[from] std::num::ParseIntError),
 
     #[error("{0}")]
+    StatusError(reqwest::StatusCode),
+
+    #[error("{0}")]
     Error(String),
 }
 

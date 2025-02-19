@@ -7,137 +7,6 @@ use crate::{
     util::{validate_folder_object_key, validate_meta_key, validate_object_key, validate_tag_key, validate_tag_value},
 };
 
-// #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-// #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-// pub enum CacheControl {
-//     NoCache,
-//     NoStore,
-//     Private,
-//     MaxAge(u32),
-// }
-
-// impl CacheControl {
-//     pub fn to_string(&self) -> String {
-//         match self {
-//             CacheControl::NoCache => "no-cache".to_string(),
-//             CacheControl::NoStore => "no-store".to_string(),
-//             CacheControl::Private => "private".to_string(),
-//             CacheControl::MaxAge(age) => format!("max-age={}", age),
-//         }
-//     }
-// }
-
-// impl TryFrom<&str> for CacheControl {
-//     type Error = ClientError;
-
-//     /// Try to parse a CacheControl from a string.
-//     ///
-//     /// Acceptable values are:
-//     ///
-//     /// - "no-cache"
-//     /// - "no-store"
-//     /// - "private"
-//     /// - "max-age=<seconds>". which `seconds` is a positive integer. for example: `max-age=3600`.
-//     ///
-//     fn try_from(value: &str) -> Result<Self, Self::Error> {
-//         match value {
-//             "no-cache" => Ok(CacheControl::NoCache),
-//             "no-store" => Ok(CacheControl::NoStore),
-//             "private" => Ok(CacheControl::Private),
-//             s if s.starts_with("max-age=") => {
-//                 if let Some(age) = s[8..].parse::<u32>().ok() {
-//                     Ok(CacheControl::MaxAge(age))
-//                 } else {
-//                     Err(ClientError::Error(format!("invalid cache control value: {}", value)))
-//                 }
-//             }
-//             _ => Err(ClientError::Error(format!("invalid cache control value: {}", value))),
-//         }
-//     }
-// }
-
-// impl TryFrom<&String> for CacheControl {
-//     type Error = ClientError;
-
-//     fn try_from(value: &String) -> Result<Self, Self::Error> {
-//         Self::try_from(value.as_str())
-//     }
-// }
-
-// impl TryFrom<String> for CacheControl {
-//     type Error = ClientError;
-
-//     fn try_from(value: String) -> Result<Self, Self::Error> {
-//         Self::try_from(value.as_str())
-//     }
-// }
-
-// #[derive(Debug, Clone, PartialEq, Eq)]
-// pub enum ContentDisposition {
-//     Inline,
-//     Attachment,
-//     AttachmentWithFilename(String),
-// }
-
-// impl ContentDisposition {
-//     pub fn to_string(&self) -> String {
-//         match self {
-//             ContentDisposition::Inline => "inline".to_string(),
-//             ContentDisposition::Attachment => "attachment".to_string(),
-//             ContentDisposition::AttachmentWithFilename(filename) => format!(
-//                 "attachment; filename=\"{}\";filename*=UTF-8''{}",
-//                 urlencoding::encode(filename),
-//                 urlencoding::encode(filename)
-//             ),
-//         }
-//     }
-// }
-
-// impl TryFrom<&str> for ContentDisposition {
-//     type Error = ClientError;
-
-//     /// Try to parse a ContentDisposition from a string.
-//     ///
-//     /// Acceptable values are:
-//     ///
-//     /// - "inline"
-//     /// - "attachment"
-//     /// - "attachment; filename=\"filename\"". for example: `attachment;filename=\"%E4%B8%AD%20abc.txt\"`. which `filename` is encoded using UTF-8 (like `encodeURIComponent` in javascript).
-//     fn try_from(value: &str) -> Result<Self, Self::Error> {
-//         let regex = regex::RegexBuilder::new(r#"^attachment;\s*filename\s*=\s*"(.+)""#)
-//             .case_insensitive(true)
-//             .build()
-//             .unwrap();
-
-//         match value.to_lowercase().as_str() {
-//             "inline" => Ok(ContentDisposition::Inline),
-//             "attachment" => Ok(ContentDisposition::Attachment),
-//             s if regex.is_match(s) => {
-//                 let captures = regex.captures(value).unwrap();
-//                 let filename = captures.get(1).unwrap().as_str();
-//                 Ok(ContentDisposition::AttachmentWithFilename(urlencoding::decode(filename)?.to_string()))
-//             }
-//             _ => Err(ClientError::Error(format!("invalid content disposition: {}", value))),
-//         }
-//     }
-// }
-
-// impl TryFrom<&String> for ContentDisposition {
-//     type Error = ClientError;
-
-//     fn try_from(value: &String) -> Result<Self, Self::Error> {
-//         Self::try_from(value.as_str())
-//     }
-// }
-
-// impl TryFrom<String> for ContentDisposition {
-//     type Error = ClientError;
-
-//     fn try_from(value: String) -> Result<Self, Self::Error> {
-//         Self::try_from(&value)
-//     }
-// }
-
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum ContentEncoding {
@@ -283,6 +152,317 @@ pub struct PutObjectOptions {
     pub tags: HashMap<String, String>,
 }
 
+pub struct PutObjectOptionsBuilder {
+    cache_control: Option<String>,
+    content_disposition: Option<String>,
+    content_encoding: Option<ContentEncoding>,
+    content_md5: Option<String>,
+    expires: Option<String>,
+    forbid_overwrite: Option<bool>,
+    server_side_encryption: Option<ServerSideEncryptionAlgorithm>,
+    server_side_data_encryption: Option<ServerSideEncryptionAlgorithm>,
+    server_side_encryption_key_id: Option<String>,
+    object_acl: Option<Acl>,
+    storage_class: Option<StorageClass>,
+    metadata: HashMap<String, String>,
+    tags: HashMap<String, String>,
+}
+
+impl PutObjectOptionsBuilder {
+    pub fn new() -> Self {
+        Self {
+            cache_control: None,
+            content_disposition: None,
+            content_encoding: None,
+            content_md5: None,
+            expires: None,
+            forbid_overwrite: None,
+            server_side_encryption: None,
+            server_side_data_encryption: None,
+            server_side_encryption_key_id: None,
+            object_acl: None,
+            storage_class: None,
+            metadata: HashMap::new(),
+            tags: HashMap::new(),
+        }
+    }
+
+    pub fn cache_control(mut self, cache_control: impl Into<String>) -> Self {
+        self.cache_control = Some(cache_control.into());
+        self
+    }
+
+    pub fn content_disposition(mut self, content_disposition: impl Into<String>) -> Self {
+        self.content_disposition = Some(content_disposition.into());
+        self
+    }
+
+    pub fn content_encoding(mut self, content_encoding: ContentEncoding) -> Self {
+        self.content_encoding = Some(content_encoding);
+        self
+    }
+
+    pub fn content_md5(mut self, content_md5: impl Into<String>) -> Self {
+        self.content_md5 = Some(content_md5.into());
+        self
+    }
+
+    pub fn expires(mut self, expires: impl Into<String>) -> Self {
+        self.expires = Some(expires.into());
+        self
+    }
+
+    pub fn forbid_overwrite(mut self, forbid_overwrite: bool) -> Self {
+        self.forbid_overwrite = Some(forbid_overwrite);
+        self
+    }
+
+    pub fn server_side_encryption(mut self, algorithm: ServerSideEncryptionAlgorithm) -> Self {
+        self.server_side_encryption = Some(algorithm);
+        self
+    }
+
+    pub fn server_side_data_encryption(mut self, algorithm: ServerSideEncryptionAlgorithm) -> Self {
+        self.server_side_data_encryption = Some(algorithm);
+        self
+    }
+
+    pub fn server_side_encryption_key_id(mut self, key_id: impl Into<String>) -> Self {
+        self.server_side_encryption_key_id = Some(key_id.into());
+        self
+    }
+
+    pub fn object_acl(mut self, acl: Acl) -> Self {
+        self.object_acl = Some(acl);
+        self
+    }
+
+    pub fn storage_class(mut self, storage_class: StorageClass) -> Self {
+        self.storage_class = Some(storage_class);
+        self
+    }
+
+    pub fn metadata(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.metadata.insert(key.into(), value.into());
+        self
+    }
+
+    pub fn tag(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.tags.insert(key.into(), value.into());
+        self
+    }
+
+    pub fn build(self) -> PutObjectOptions {
+        PutObjectOptions {
+            cache_control: self.cache_control,
+            content_disposition: self.content_disposition,
+            content_encoding: self.content_encoding,
+            content_md5: self.content_md5,
+            expires: self.expires,
+            forbid_overwrite: self.forbid_overwrite,
+            server_side_encryption: self.server_side_encryption,
+            server_side_data_encryption: self.server_side_data_encryption,
+            server_side_encryption_key_id: self.server_side_encryption_key_id,
+            object_acl: self.object_acl,
+            storage_class: self.storage_class,
+            metadata: self.metadata,
+            tags: self.tags,
+        }
+    }
+}
+
+impl Default for PutObjectOptionsBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+///
+/// Get object options
+///
+pub struct GetObjectOptions {
+    // The following fields are header items
+    /// 指定文件传输的范围。
+    ///
+    /// - 如果指定的范围符合规范，返回消息中会包含整个 Object 的大小和此次返回 Object 的范围。例如：`Content-Range: bytes 0~9/44`，表示整个 Object 大小为 `44`，此次返回的范围为 `0~9`。
+    /// - 如果指定的范围不符合规范，则传送整个 Object，并且结果中不包含 `Content-Range`。
+    pub range: Option<String>,
+
+    /// GMT 日期时间字符串，例如：`Fri, 13 Nov 2015 14:47:53 GMT`
+    ///
+    /// 如果指定的时间早于实际修改时间或指定的时间不符合规范，则直接返回 Object，并返回 `200 OK`；
+    /// 如果指定的时间等于或者晚于实际修改时间，则返回 `304 Not Modified`。
+    pub if_modified_since: Option<String>,
+
+    /// GMT 日期时间字符串，例如：`Fri, 13 Nov 2015 14:47:53 GMT`
+    ///
+    /// 如果指定的时间等于或者晚于 Object 实际修改时间，则正常传输 Object，并返回 `200 OK`；
+    /// 如果指定的时间早于实际修改时间，则返回 `412 Precondition Failed`。
+    /// `If-Modified-Since` 和 `If-Unmodified-Since` 可以同时使用。
+    pub if_unmodified_since: Option<String>,
+
+    /// ETag 值
+    ///
+    /// 如果传入的 `ETag` 和 Object 的 `ETag` 匹配，则正常传输 Object，并返回 `200 OK`；
+    /// 如果传入的 `ETag` 和 Object 的 `ETag` 不匹配，则返回 `412 Precondition Failed`。
+    pub if_match: Option<String>,
+
+    /// ETag 值
+    ///
+    /// 如果传入的 `ETag` 值和 `Object` 的 `ETag` 不匹配，则正常传输 Object，并返回 `200 OK`；
+    /// 如果传入的 `ETag` 和 `Object` 的 `ETag` 匹配，则返回 `304 Not Modified`。
+    ///
+    /// `If-Match` 和 `If-None-Match` 可以同时使用。
+    pub if_non_match: Option<String>,
+
+    /// 指定客户端的编码类型。例如：gzip
+    ///
+    /// 如果要对返回内容进行 Gzip 压缩传输，您需要在请求头中以显示方式加入 `Accept-Encoding:gzip`。
+    /// OSS 会根据 Object 的 Content-Type 和 Object 大小（不小于1KB），
+    /// 判断传输过程中是否对数据进行 Gzip 压缩。满足条件时，数据以压缩形式传输，否则，数据以原始形式传输。
+    ///
+    /// 注意：
+    ///
+    /// - 如果采用了 Gzip 压缩且压缩生效，则不会附带 `ETag` 和 `Content-Length` 信息。
+    /// - 目前 OSS 支持对以下 `Content-Type` 类型的数据进行 Gzip 压缩：
+    ///   - text/cache-manifest
+    ///   - text/xml
+    ///   - text/css
+    ///   - text/html
+    ///   - text/plain
+    ///   - application/javascript
+    ///   - application/x-javascript
+    ///   - application/rss+xml
+    ///   - application/json
+    ///   - text/json
+    pub accept_encoding: Option<String>,
+
+    // The following fields are query parameters
+    /// Add `Content-Language` to response header
+    pub response_content_language: Option<String>,
+
+    /// Add `Expires` to response header
+    pub response_expires: Option<String>,
+
+    /// Add `Cache-Control` to response header
+    pub response_cache_control: Option<String>,
+
+    /// Add `Content-Disposition` to response header
+    pub response_content_disposition: Option<String>,
+
+    /// Add `Content-Encoding` to response header
+    pub response_content_encoding: Option<ContentEncoding>,
+}
+
+pub struct GetObjectOptionsBuilder {
+    range: Option<String>,
+    if_modified_since: Option<String>,
+    if_unmodified_since: Option<String>,
+    if_match: Option<String>,
+    if_non_match: Option<String>,
+    accept_encoding: Option<String>,
+    response_content_language: Option<String>,
+    response_expires: Option<String>,
+    response_cache_control: Option<String>,
+    response_content_disposition: Option<String>,
+    response_content_encoding: Option<ContentEncoding>,
+}
+
+impl GetObjectOptionsBuilder {
+    pub fn new() -> Self {
+        Self {
+            range: None,
+            if_modified_since: None,
+            if_unmodified_since: None,
+            if_match: None,
+            if_non_match: None,
+            accept_encoding: None,
+            response_content_language: None,
+            response_expires: None,
+            response_cache_control: None,
+            response_content_disposition: None,
+            response_content_encoding: None,
+        }
+    }
+
+    pub fn range(mut self, range: impl Into<String>) -> Self {
+        self.range = Some(range.into());
+        self
+    }
+
+    pub fn if_modified_since(mut self, if_modified_since: impl Into<String>) -> Self {
+        self.if_modified_since = Some(if_modified_since.into());
+        self
+    }
+
+    pub fn if_unmodified_since(mut self, if_unmodified_since: impl Into<String>) -> Self {
+        self.if_unmodified_since = Some(if_unmodified_since.into());
+        self
+    }
+
+    pub fn if_match(mut self, if_match: impl Into<String>) -> Self {
+        self.if_match = Some(if_match.into());
+        self
+    }
+
+    pub fn if_non_match(mut self, if_non_match: impl Into<String>) -> Self {
+        self.if_non_match = Some(if_non_match.into());
+        self
+    }
+
+    pub fn accept_encoding(mut self, accept_encoding: impl Into<String>) -> Self {
+        self.accept_encoding = Some(accept_encoding.into());
+        self
+    }
+
+    pub fn response_content_language(mut self, content_language: impl Into<String>) -> Self {
+        self.response_content_language = Some(content_language.into());
+        self
+    }
+
+    pub fn response_expires(mut self, expires: impl Into<String>) -> Self {
+        self.response_expires = Some(expires.into());
+        self
+    }
+
+    pub fn response_cache_control(mut self, cache_control: impl Into<String>) -> Self {
+        self.response_cache_control = Some(cache_control.into());
+        self
+    }
+
+    pub fn response_content_disposition(mut self, content_disposition: impl Into<String>) -> Self {
+        self.response_content_disposition = Some(content_disposition.into());
+        self
+    }
+
+    pub fn response_content_encoding(mut self, content_encoding: ContentEncoding) -> Self {
+        self.response_content_encoding = Some(content_encoding);
+        self
+    }
+
+    pub fn build(self) -> GetObjectOptions {
+        GetObjectOptions {
+            range: self.range,
+            if_modified_since: self.if_modified_since,
+            if_unmodified_since: self.if_unmodified_since,
+            if_match: self.if_match,
+            if_non_match: self.if_non_match,
+            accept_encoding: self.accept_encoding,
+            response_content_language: self.response_content_language,
+            response_expires: self.response_expires,
+            response_cache_control: self.response_cache_control,
+            response_content_disposition: self.response_content_disposition,
+            response_content_encoding: self.response_content_encoding,
+        }
+    }
+}
+
+impl Default for GetObjectOptionsBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub(crate) fn build_put_object_request(
     bucket_name: &str,
     object_key: &str,
@@ -416,10 +596,65 @@ pub(crate) fn build_put_object_request(
     Ok(request)
 }
 
+pub(crate) fn build_get_object_request(bucket_name: &str, object_key: &str, options: &Option<GetObjectOptions>) -> RequestBuilder {
+    let mut request = RequestBuilder::new().method(RequestMethod::Get).bucket(bucket_name).object(object_key);
+
+    if let Some(options) = options {
+        if let Some(s) = &options.range {
+            request = request.add_header("range", s);
+        }
+
+        if let Some(s) = &options.if_modified_since {
+            request = request.add_header("if-modified-since", s);
+        }
+
+        if let Some(s) = &options.if_unmodified_since {
+            request = request.add_header("if-unmodified-since", s);
+        }
+
+        if let Some(s) = &options.if_match {
+            request = request.add_header("if-match", s);
+        }
+
+        if let Some(s) = &options.if_non_match {
+            request = request.add_header("if-non-match", s);
+        }
+
+        if let Some(s) = &options.accept_encoding {
+            request = request.add_header("accept-encoding", s);
+        }
+
+        if let Some(s) = &options.response_content_language {
+            request = request.add_query("response-content-language", s);
+        }
+
+        if let Some(s) = &options.response_expires {
+            request = request.add_query("response-expires", s);
+        }
+
+        if let Some(s) = &options.response_cache_control {
+            request = request.add_query("response-cache-control", s);
+        }
+
+        if let Some(s) = &options.response_content_disposition {
+            request = request.add_query("response-content-disposition", s);
+        }
+
+        if let Some(ce) = options.response_content_encoding {
+            request = request.add_query("response-content-encoding", ce.as_str());
+        }
+    }
+
+    request
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
 pub struct PutObjectResult {
+    /// ETag
+    pub etag: Option<String>,
+
     /// 文件 MD5 值，Base64 编码的字符串
     pub content_md5: Option<String>,
 
@@ -432,11 +667,13 @@ pub struct PutObjectResult {
 
 impl PutObjectResult {
     pub fn from_headers(headers: &HashMap<String, String>) -> Self {
+        let etag = headers.get("etag").map(|v| v.to_string());
         let content_md5 = headers.get("content-md5").map(|v| v.to_string());
         let hash_crc64ecma = headers.get("x-oss-hash-crc64ecma").map(|v| v.to_string());
         let version_id = headers.get("x-oss-version-id").map(|v| v.to_string());
 
         Self {
+            etag,
             content_md5,
             hash_crc64ecma,
             version_id,

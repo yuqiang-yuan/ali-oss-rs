@@ -1,8 +1,12 @@
 use std::path::Path;
 
-use crate::{error::ClientResult, object_common::{build_put_object_request, PutObjectOptions, PutObjectResult}};
+use crate::{
+    error::{ClientError, ClientResult},
+    object_common::{build_get_object_request, build_put_object_request, GetObjectOptions, PutObjectOptions, PutObjectResult},
+    util::validate_path,
+};
 
-use super::Client;
+use super::{BytesBody, Client};
 
 pub trait ObjectOperations {
     ///
@@ -10,6 +14,14 @@ pub trait ObjectOperations {
     /// The file length must be greater than 0.
     ///
     fn upload_file<S1, S2, P>(&self, bucket_name: S1, object_key: S2, file_path: P, options: Option<PutObjectOptions>) -> ClientResult<PutObjectResult>
+    where
+        S1: AsRef<str>,
+        S2: AsRef<str>,
+        P: AsRef<Path>;
+
+    ///
+    /// Download file to local file.
+    fn download_file<S1, S2, P>(&self, bucket_name: S1, object_key: S2, file_path: P, options: Option<GetObjectOptions>) -> ClientResult<()>
     where
         S1: AsRef<str>,
         S2: AsRef<str>,
@@ -28,7 +40,7 @@ impl ObjectOperations for Client {
     where
         S1: AsRef<str>,
         S2: AsRef<str>,
-        P: AsRef<Path>
+        P: AsRef<Path>,
     {
         let bucket_name = bucket_name.as_ref();
         let object_key = object_key.as_ref();
@@ -45,10 +57,48 @@ impl ObjectOperations for Client {
         Ok(PutObjectResult::from_headers(&headers))
     }
 
+    ///
+    /// Download file to local file.
+    fn download_file<S1, S2, P>(&self, bucket_name: S1, object_key: S2, file_path: P, options: Option<GetObjectOptions>) -> ClientResult<()>
+    where
+        S1: AsRef<str>,
+        S2: AsRef<str>,
+        P: AsRef<Path>,
+    {
+        let bucket_name = bucket_name.as_ref();
+        let object_key = object_key.as_ref();
+        let file_path = file_path.as_ref();
+
+        let file_path = if file_path.is_relative() {
+            file_path.canonicalize()?
+        } else {
+            file_path.to_path_buf()
+        };
+
+        if !validate_path(&file_path) {
+            return Err(ClientError::Error(format!("invalid file path: {:?}", file_path.as_os_str().to_str())));
+        }
+
+        // check parent path
+        if let Some(parent_path) = file_path.parent() {
+            if !parent_path.exists() {
+                std::fs::create_dir_all(parent_path)?;
+            }
+        }
+
+        let request = build_get_object_request(bucket_name, object_key, &options);
+
+        let (_, mut stream) = self.do_request::<BytesBody>(request)?;
+
+        stream.save_to_file(file_path)?;
+
+        Ok(())
+    }
+
     fn create_folder<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<PutObjectOptions>) -> ClientResult<PutObjectResult>
     where
         S1: AsRef<str>,
-        S2: AsRef<str>
+        S2: AsRef<str>,
     {
         let bucket_name = bucket_name.as_ref();
         let object_key = object_key.as_ref();
@@ -67,12 +117,14 @@ impl ObjectOperations for Client {
     }
 }
 
-
 #[cfg(all(test, feature = "blocking"))]
 mod test_object_blocking {
     use std::{collections::HashMap, sync::Once};
 
-    use crate::{blocking::{object::ObjectOperations, Client}, object_common::PutObjectOptions};
+    use crate::{
+        blocking::{object::ObjectOperations, Client},
+        object_common::{GetObjectOptionsBuilder, PutObjectOptions},
+    };
 
     static INIT: Once = Once::new();
 
@@ -88,13 +140,7 @@ mod test_object_blocking {
         setup();
 
         let client = Client::from_env();
-        let result = client
-            .upload_file(
-                "yuanyq",
-                "rust-sdk-test/katex.zip",
-                "/home/yuanyq/Downloads/katex.zip",
-                None,
-            );
+        let result = client.upload_file("yuanyq", "rust-sdk-test/katex.zip", "/home/yuanyq/Downloads/katex.zip", None);
 
         log::debug!("{:?}", result);
 
@@ -120,13 +166,12 @@ mod test_object_blocking {
             ..Default::default()
         };
 
-        let result = client
-            .upload_file(
-                "yuanyq",
-                "rust-sdk-test/Oracle_VirtualBox_Extension_Pack-7.1.4.vbox-extpack",
-                "/home/yuanyq/Downloads/Oracle_VirtualBox_Extension_Pack-7.1.4.vbox-extpack",
-                Some(options),
-            );
+        let result = client.upload_file(
+            "yuanyq",
+            "rust-sdk-test/Oracle_VirtualBox_Extension_Pack-7.1.4.vbox-extpack",
+            "/home/yuanyq/Downloads/Oracle_VirtualBox_Extension_Pack-7.1.4.vbox-extpack",
+            Some(options),
+        );
 
         log::debug!("{:?}", result);
 
@@ -144,5 +189,47 @@ mod test_object_blocking {
         log::debug!("{:?}", result);
 
         assert!(result.is_ok())
+    }
+
+    /// Test download file with invalid options
+    #[test]
+    fn test_download_file_1() {
+        setup();
+
+        let client = Client::from_env();
+
+        let options = GetObjectOptionsBuilder::new()
+            .if_modified_since("Tue, 18 Feb 2025 18:03:21 GMT")
+            .range("bytes=0-499")
+            .build();
+
+        let output_file = "/home/yuanyq/Downloads/ali-oss-rs-test/katex.zip.1";
+
+        let result = client.download_file("yuanyq", "rust-sdk-test/katex.zip", output_file, Some(options));
+
+        log::debug!("{:?}", result);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_download_file_2() {
+        setup();
+
+        let client = Client::from_env();
+
+        let options = GetObjectOptionsBuilder::new().range("bytes=0-499").build();
+
+        let output_file = "/home/yuanyq/Downloads/ali-oss-rs-test/katex.zip.1";
+
+        let result = client.download_file("yuanyq", "rust-sdk-test/katex.zip", output_file, Some(options));
+
+        log::debug!("{:?}", result);
+
+        assert!(result.is_ok());
+
+        let file_meta = std::fs::metadata(output_file).unwrap();
+
+        assert_eq!(500, file_meta.len());
     }
 }

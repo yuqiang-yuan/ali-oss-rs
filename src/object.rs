@@ -1,11 +1,14 @@
 use std::path::Path;
 
 use async_trait::async_trait;
+use futures::TryStreamExt;
+use tokio::io::AsyncWriteExt;
 
 use crate::{
-    error::ClientResult,
-    object_common::{build_put_object_request, PutObjectOptions, PutObjectResult},
-    Client,
+    error::{ClientError, ClientResult},
+    object_common::{build_get_object_request, build_put_object_request, GetObjectOptions, PutObjectOptions, PutObjectResult},
+    util::validate_path,
+    ByteStream, Client,
 };
 
 #[async_trait]
@@ -15,6 +18,15 @@ pub trait ObjectOperations {
     /// The file length must be greater than 0.
     ///
     async fn upload_file<S1, S2, P>(&self, bucket_name: S1, object_key: S2, file_path: P, options: Option<PutObjectOptions>) -> ClientResult<PutObjectResult>
+    where
+        S1: AsRef<str> + Send,
+        S2: AsRef<str> + Send,
+        P: AsRef<Path> + Send;
+
+    ///
+    /// Download object and save to local file
+    ///
+    async fn download_file<S1, S2, P>(&self, bucket_name: S1, object_key: S2, file_path: P, options: Option<GetObjectOptions>) -> ClientResult<()>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send,
@@ -59,6 +71,51 @@ impl ObjectOperations for Client {
         Ok(PutObjectResult::from_headers(&headers))
     }
 
+    /// Download oss object to local file.
+    /// `file_path` is the full file path to save.
+    /// If the `file_path` parent path does not exist, it will be created
+    async fn download_file<S1, S2, P>(&self, bucket_name: S1, object_key: S2, file_path: P, options: Option<GetObjectOptions>) -> ClientResult<()>
+    where
+        S1: AsRef<str> + Send,
+        S2: AsRef<str> + Send,
+        P: AsRef<Path> + Send,
+    {
+        let bucket_name = bucket_name.as_ref();
+        let object_key = object_key.as_ref();
+        let file_path = file_path.as_ref();
+
+        let file_path = if file_path.is_relative() {
+            file_path.canonicalize()?
+        } else {
+            file_path.to_path_buf()
+        };
+
+        if !validate_path(&file_path) {
+            return Err(ClientError::Error(format!("invalid file path: {:?}", file_path.as_os_str().to_str())));
+        }
+
+        // check parent path
+        if let Some(parent_path) = file_path.parent() {
+            if !parent_path.exists() {
+                std::fs::create_dir_all(parent_path)?;
+            }
+        }
+
+        let request = build_get_object_request(bucket_name, object_key, &options);
+
+        let (_, mut stream) = self.do_request::<ByteStream>(request).await?;
+
+        let mut file = tokio::fs::File::create(&file_path).await?;
+
+        while let Some(chunk) = stream.try_next().await? {
+            file.write_all(&chunk).await?;
+        }
+
+        file.flush().await?;
+
+        Ok(())
+    }
+
     ///
     /// Create a "folder".
     /// The `object_key` must ends with `/`
@@ -84,11 +141,16 @@ impl ObjectOperations for Client {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "blocking")))]
 mod test_object_async {
     use std::{collections::HashMap, sync::Once};
 
-    use crate::{common::StorageClass, object::ObjectOperations, object_common::PutObjectOptions, Client};
+    use crate::{
+        common::StorageClass,
+        object::ObjectOperations,
+        object_common::{GetObjectOptionsBuilder, PutObjectOptions},
+        Client,
+    };
 
     static INIT: Once = Once::new();
 
@@ -164,12 +226,7 @@ mod test_object_async {
         };
 
         let result = client
-            .upload_file(
-                "yuanyq",
-                "rust-sdk-test/archived/demo.mp4",
-                "/home/yuanyq/Pictures/demo.mp4",
-                Some(options),
-            )
+            .upload_file("yuanyq", "rust-sdk-test/archived/demo.mp4", "/home/yuanyq/Pictures/demo.mp4", Some(options))
             .await;
 
         log::debug!("{:?}", result);
@@ -188,5 +245,61 @@ mod test_object_async {
         log::debug!("{:?}", result);
 
         assert!(result.is_ok())
+    }
+
+    /// Download full file content to local file
+    /// with no options
+    #[tokio::test]
+    async fn test_download_file_1() {
+        setup();
+        let client = Client::from_env();
+
+        let output_file = "/home/yuanyq/Downloads/ali-oss-rs-test/katex.zip";
+
+        let result = client.download_file("yuanyq", "rust-sdk-test/katex.zip", output_file, None).await;
+
+        assert!(result.is_ok());
+    }
+
+    /// Download range of file
+    #[tokio::test]
+    async fn test_download_file_2() {
+        setup();
+        let client = Client::from_env();
+
+        let output_file = "/home/yuanyq/Downloads/ali-oss-rs-test/katex.zip.1";
+
+        let options = GetObjectOptionsBuilder::new().range("bytes=0-499").build();
+
+        let result = client.download_file("yuanyq", "rust-sdk-test/katex.zip", output_file, Some(options)).await;
+
+        assert!(result.is_ok());
+
+        let file_meta = std::fs::metadata(output_file).unwrap();
+
+        assert_eq!(500, file_meta.len());
+    }
+
+    /// Test invalid output file name
+    #[tokio::test]
+    async fn test_download_file_3() {
+        setup();
+        let client = Client::from_env();
+
+        let invalid_files = [
+            "/home/yuanyq/Downloads/ali-oss-rs-test>/katex.zip.1",
+            "/home/yuanyq/Downloads/ali-oss-rs-test|/katex;.zip.1",
+            "/home/yuanyq/Downloads/ali-oss-rs-test\0/katex.zip.1",
+        ];
+
+        for output_file in invalid_files {
+            let options = GetObjectOptionsBuilder::new().range("bytes=0-499").build();
+
+            let result = client.download_file("yuanyq", "rust-sdk-test/katex.zip", output_file, Some(options)).await;
+
+            assert!(result.is_err());
+
+            log::debug!("{}", result.unwrap_err());
+        }
     }
 }

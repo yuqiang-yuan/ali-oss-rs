@@ -87,13 +87,13 @@ impl RequestBuilder {
         self
     }
 
-    pub fn bucket<S: AsRef<str>>(mut self, bucket_name: S) -> Self {
-        self.bucket_name = bucket_name.as_ref().to_string();
+    pub fn bucket<S: Into<String>>(mut self, bucket_name: S) -> Self {
+        self.bucket_name = bucket_name.into();
         self
     }
 
-    pub fn object<S: AsRef<str>>(mut self, object_key: S) -> Self {
-        self.object_key = object_key.as_ref().to_string();
+    pub fn object<S: Into<String>>(mut self, object_key: S) -> Self {
+        self.object_key = object_key.into();
         self
     }
 

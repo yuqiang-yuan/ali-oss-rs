@@ -78,7 +78,7 @@ impl BucketOperations for Client {
     }
 
     fn list_objects<S: AsRef<str>>(&self, bucket_name: S, options: Option<ListObjectsOptions>) -> ClientResult<ListObjectsResult> {
-        let request = build_list_objects_request(bucket_name.as_ref(), &options);
+        let request = build_list_objects_request(bucket_name.as_ref(), &options)?;
 
         let (_, content) = self.do_request::<String>(request)?;
 
@@ -143,7 +143,7 @@ mod test_bucket_blocking {
         let client = Client::from_env();
 
         let options = ListObjectsOptions {
-            delimiter: Some("/".to_string()),
+            delimiter: Some('/'),
             prefix: Some("yuanyu-test/".to_string()),
             fetch_owner: Some(true),
             ..Default::default()

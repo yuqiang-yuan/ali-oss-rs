@@ -1,3 +1,5 @@
+use std::path::{Component, Path};
+
 use chrono::{DateTime, Utc};
 use hmac::{Hmac, Mac};
 use sha2::{Digest, Sha256};
@@ -128,6 +130,53 @@ pub(crate) fn validate_meta_key(key: &str) -> bool {
     key.starts_with("x-oss-meta-") && key.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
 }
 
+/// Check if the file name contains invalid characters.
+/// note: valid file name has different rules on windows and linux and macOS
+/// TODO: check file length
+pub(crate) fn validate_file_name(s: &str) -> bool {
+    !s.is_empty()
+        && !s.contains(['<', '>', ':', '"', '/', '\\', '|', '?', '*', '\0'])
+        && ![
+            "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6",
+            "LPT7", "LPT8", "LPT9",
+        ]
+        .contains(&s)
+}
+
+/// Validate each normal component (folder name) in the given path
+/// the path must be an absolute path.
+/// TODO: check path length
+pub(crate) fn validate_path(p: impl AsRef<Path>) -> bool {
+    if p.as_ref().is_relative() {
+        return false;
+    }
+
+    // check the folder name and file name
+    if !p.as_ref().components().all(|comp| match comp {
+        Component::Normal(os_str) => {
+            if let Some(s) = os_str.to_str() {
+                validate_file_name(s)
+            } else {
+                false
+            }
+        }
+        _ => true,
+    }) {
+        return false;
+    }
+
+    // check the file stem only
+    if let Some(stem) = p.as_ref().file_stem() {
+        if let Some(s) = stem.to_str() {
+            validate_file_name(s)
+        } else {
+            false
+        }
+    } else {
+        false
+    }
+}
+
 #[cfg(test)]
 mod test_util {
     use crate::util::{get_http_date, get_iso8601_date_string};
@@ -144,5 +193,39 @@ mod test_util {
 
         let s = get_http_date();
         println!("HTTP Date header: {}", s);
+    }
+
+    #[test]
+    fn test_validate_path() {
+        use super::validate_path;
+
+        // Test invalid relative paths
+        assert!(!validate_path("relative/path"));
+        assert!(!validate_path("./relative/path"));
+        assert!(!validate_path("../relative/path"));
+
+        // Test valid absolute paths on Unix
+        assert!(validate_path("/absolute/path"));
+        assert!(validate_path("/absolute/path/file.txt"));
+        assert!(validate_path("/absolute/path/with space/file.txt"));
+
+        // Test invalid characters in path components
+        assert!(!validate_path("/path/with/</invalid"));
+        assert!(!validate_path("/path/with/>/invalid"));
+        assert!(!validate_path("/path/with/:/invalid"));
+        assert!(!validate_path("/path/with/\\/invalid"));
+        assert!(!validate_path("/path/with/|/invalid"));
+        assert!(!validate_path("/path/with/?/invalid"));
+        assert!(!validate_path("/path/with/*/invalid"));
+
+        // Test reserved names on Windows
+        assert!(!validate_path("/path/COM1/file"));
+        assert!(!validate_path("/path/PRN/file"));
+        assert!(!validate_path("/path/AUX/file"));
+        assert!(!validate_path("/path/NUL/file"));
+
+        // Test path component length
+        assert!(validate_path("/path/normal_length_folder/file.txt"));
+        assert!(!validate_path("/path/very_long_folder_name_that_exceeds_255_characters_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/file.txt"));
     }
 }

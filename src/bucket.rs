@@ -116,7 +116,7 @@ impl BucketOperations for crate::Client {
     /// List objects in a bucket
     ///
     async fn list_objects<S: AsRef<str> + Send>(&self, bucket_name: S, options: Option<ListObjectsOptions>) -> ClientResult<ListObjectsResult> {
-        let request = build_list_objects_request(bucket_name.as_ref(), &options);
+        let request = build_list_objects_request(bucket_name.as_ref(), &options)?;
 
         let (_, content) = self.do_request::<String>(request).await?;
 

@@ -5,7 +5,7 @@ use crate::{
         AccessMonitor, Acl, CrossRegionReplication, DataRedundancyType, ObjectType, Owner, ServerSideEncryptionAlgorithm, ServerSideEncryptionRule,
         StorageClass, TransferAcceleration, Versioning,
     },
-    error::ClientResult,
+    error::{ClientError, ClientResult},
     request::{RequestBody, RequestBuilder, RequestMethod},
 };
 
@@ -567,7 +567,7 @@ impl ListObjectsResult {
 #[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
 pub struct ListObjectsOptions {
     /// 对 Object 名字进行分组的字符。所有名字包含指定的前缀且第一次出现 `delimiter` 字符之间的 Object 作为一组元素 `common_prefixes`
-    pub delimiter: Option<String>,
+    pub delimiter: Option<char>,
 
     /// 设定从 `start_after` 之后按字母排序开始返回 Object。
     /// `start_after` 用来实现分页显示效果，参数的长度必须小于 1024 字节。
@@ -595,6 +595,51 @@ pub struct ListObjectsOptions {
 
     /// 指定是否在返回结果中包含 `owner` 信息
     pub fetch_owner: Option<bool>,
+}
+
+#[derive(Default)]
+pub struct ListObjectsOptionsBuilder {
+    options: ListObjectsOptions,
+}
+
+impl ListObjectsOptionsBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn delimiter(mut self, delimiter: char) -> Self {
+        self.options.delimiter = Some(delimiter);
+        self
+    }
+
+    pub fn start_after<T: Into<String>>(mut self, start_after: T) -> Self {
+        self.options.start_after = Some(start_after.into());
+        self
+    }
+
+    pub fn continuation_token<T: Into<String>>(mut self, continuation_token: T) -> Self {
+        self.options.continuation_token = Some(continuation_token.into());
+        self
+    }
+
+    pub fn max_keys(mut self, max_keys: u32) -> Self {
+        self.options.max_keys = Some(max_keys);
+        self
+    }
+
+    pub fn prefix<T: Into<String>>(mut self, prefix: T) -> Self {
+        self.options.prefix = Some(prefix.into());
+        self
+    }
+
+    pub fn fetch_owner(mut self, fetch_owner: bool) -> Self {
+        self.options.fetch_owner = Some(fetch_owner);
+        self
+    }
+
+    pub fn build(self) -> ListObjectsOptions {
+        self.options
+    }
 }
 
 pub(crate) fn build_put_bucket_request(bucket_name: &str, config: &PutBucketConfiguration, options: &Option<PutBucketOptions>) -> ClientResult<RequestBuilder> {
@@ -653,20 +698,23 @@ pub(crate) fn build_list_buckets_request(options: &Option<ListBucketsOptions>) -
     request
 }
 
-pub(crate) fn build_list_objects_request(bucket_name: &str, options: &Option<ListObjectsOptions>) -> RequestBuilder {
+pub(crate) fn build_list_objects_request(bucket_name: &str, options: &Option<ListObjectsOptions>) -> ClientResult<RequestBuilder> {
     let mut request = RequestBuilder::new().method(RequestMethod::Get).bucket(bucket_name).add_query("list-type", "2");
 
     if let Some(options) = options {
-        if let Some(s) = &options.delimiter {
-            request = request.add_query("delimiter", s);
+        if let Some(c) = options.delimiter {
+            request = request.add_query("delimiter", c.to_string());
         }
 
         if let Some(s) = &options.prefix {
             request = request.add_query("prefix", s);
         }
 
-        if let Some(s) = &options.max_keys {
-            request = request.add_query("max-keys", s.to_string());
+        if let Some(u) = options.max_keys {
+            if u == 0 || u > 1000 {
+                return Err(ClientError::Error(format!("invalid max-keys: {}. must between 1 and 1000", u)));
+            }
+            request = request.add_query("max-keys", u.to_string());
         }
 
         if let Some(s) = &options.start_after {
@@ -682,5 +730,5 @@ pub(crate) fn build_list_objects_request(bucket_name: &str, options: &Option<Lis
         }
     }
 
-    request
+    Ok(request)
 }

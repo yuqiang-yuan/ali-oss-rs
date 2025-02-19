@@ -208,13 +208,17 @@ impl Client {
                 Ok(s) => {
                     log::error!("{}", s);
                     if s.is_empty() {
-                        Err(ClientError::Error(format!("API call failed with status code: {}", status.as_str())))
+                        log::error!("call api failed with status: \"{}\". full url: {}", status, full_url);
+                        Err(ClientError::StatusError(status))
                     } else {
                         let error_response = ErrorResponse::from_xml(&s)?;
                         Err(ClientError::ApiError(Box::new(error_response)))
                     }
                 }
-                Err(_) => Err(ClientError::Error(format!("API call failed with status code: {}", status.as_str()))),
+                Err(_) => {
+                    log::error!("call api failed with status: \"{}\". full url: {}", status, full_url);
+                    Err(ClientError::StatusError(status))
+                }
             }
         } else {
             Ok((response_headers, T::from_response(response).await?))
