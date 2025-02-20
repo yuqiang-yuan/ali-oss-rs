@@ -8,24 +8,59 @@ use crate::{
     },
     request::{RequestBuilder, RequestMethod},
     util::validate_path,
+    RequestBody,
 };
 
 use super::{BytesBody, Client};
+
+use base64::{prelude::BASE64_STANDARD, Engine};
 
 pub trait ObjectOperations {
     /// Uploads a file to a specified bucket and object key.
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
-    fn upload_file<S1, S2, P>(&self, bucket_name: S1, object_key: S2, file_path: P, options: Option<PutObjectOptions>) -> ClientResult<PutObjectResult>
+    fn put_object_from_file<S1, S2, P>(
+        &self,
+        bucket_name: S1,
+        object_key: S2,
+        file_path: P,
+        options: Option<PutObjectOptions>,
+    ) -> ClientResult<PutObjectResult>
     where
         S1: AsRef<str>,
         S2: AsRef<str>,
         P: AsRef<Path>;
 
+    /// Create an object from buffer. If you are going to upload a large file, it is recommended to use `upload_file` instead.
+    /// And, it is recommended to set `mime_type` in `options`
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
+    fn put_object_from_buffer<S1, S2, B>(&self, bucket_name: S1, object_key: S2, buffer: B, options: Option<PutObjectOptions>) -> ClientResult<PutObjectResult>
+    where
+        S1: AsRef<str>,
+        S2: AsRef<str>,
+        B: Into<Vec<u8>>;
+
+    /// Create an object from base64 string.
+    /// And, it is recommended to set `mime_type` in `options`
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
+    fn put_object_from_base64<S1, S2, S3>(
+        &self,
+        bucket_name: S1,
+        object_key: S2,
+        base64_string: S3,
+        options: Option<PutObjectOptions>,
+    ) -> ClientResult<PutObjectResult>
+    where
+        S1: AsRef<str>,
+        S2: AsRef<str>,
+        S3: AsRef<str>;
+
     /// Uploads a file to a specified bucket and object key.
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getobject>
-    fn download_file<S1, S2, P>(&self, bucket_name: S1, object_key: S2, file_path: P, options: Option<GetObjectOptions>) -> ClientResult<()>
+    fn get_object_to_file<S1, S2, P>(&self, bucket_name: S1, object_key: S2, file_path: P, options: Option<GetObjectOptions>) -> ClientResult<()>
     where
         S1: AsRef<str>,
         S2: AsRef<str>,
@@ -77,7 +112,7 @@ impl ObjectOperations for Client {
     /// Uploads a file to a specified bucket and object key.
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
-    fn upload_file<S1, S2, P>(&self, bucket_name: S1, object_key: S2, file_path: P, options: Option<PutObjectOptions>) -> ClientResult<PutObjectResult>
+    fn put_object_from_file<S1, S2, P>(&self, bucket_name: S1, object_key: S2, file_path: P, options: Option<PutObjectOptions>) -> ClientResult<PutObjectResult>
     where
         S1: AsRef<str>,
         S2: AsRef<str>,
@@ -98,10 +133,68 @@ impl ObjectOperations for Client {
         Ok(PutObjectResult::from_headers(&headers))
     }
 
+    /// Create an object from buffer. If you are going to upload a large file, it is recommended to use `upload_file` instead.
+    /// And, it is recommended to set `mime_type` in `options`
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
+    fn put_object_from_buffer<S1, S2, B>(&self, bucket_name: S1, object_key: S2, buffer: B, options: Option<PutObjectOptions>) -> ClientResult<PutObjectResult>
+    where
+        S1: AsRef<str>,
+        S2: AsRef<str>,
+        B: Into<Vec<u8>>,
+    {
+        let bucket_name = bucket_name.as_ref();
+        let object_key = object_key.as_ref();
+
+        let object_key = object_key.strip_prefix("/").unwrap_or(object_key);
+        let object_key = object_key.strip_suffix("/").unwrap_or(object_key);
+
+        let data = buffer.into();
+
+        let mut request = build_put_object_request(bucket_name, object_key, None, &options)?
+            .add_header("content-length", data.len().to_string())
+            .body(RequestBody::Bytes(data));
+
+        if let Some(options) = options {
+            if let Some(s) = &options.mime_type {
+                request = request.add_header("content-type", s);
+            }
+        }
+
+        let (headers, _) = self.do_request::<()>(request)?;
+
+        Ok(PutObjectResult::from_headers(&headers))
+    }
+
+    /// Create an object from base64 string.
+    /// And, it is recommended to set `mime_type` in `options`
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
+    fn put_object_from_base64<S1, S2, S3>(
+        &self,
+        bucket_name: S1,
+        object_key: S2,
+        base64_string: S3,
+        options: Option<PutObjectOptions>,
+    ) -> ClientResult<PutObjectResult>
+    where
+        S1: AsRef<str>,
+        S2: AsRef<str>,
+        S3: AsRef<str>,
+    {
+        let data = if let Ok(d) = BASE64_STANDARD.decode(base64_string.as_ref()) {
+            d
+        } else {
+            return Err(ClientError::Error("Decoding base64 string failed".to_string()));
+        };
+
+        self.put_object_from_buffer(bucket_name, object_key, data, options)
+    }
+
     /// Uploads a file to a specified bucket and object key.
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getobject>
-    fn download_file<S1, S2, P>(&self, bucket_name: S1, object_key: S2, file_path: P, options: Option<GetObjectOptions>) -> ClientResult<()>
+    fn get_object_to_file<S1, S2, P>(&self, bucket_name: S1, object_key: S2, file_path: P, options: Option<GetObjectOptions>) -> ClientResult<()>
     where
         S1: AsRef<str>,
         S2: AsRef<str>,
@@ -240,10 +333,12 @@ impl ObjectOperations for Client {
 mod test_object_blocking {
     use std::{collections::HashMap, sync::Once};
 
+    use base64::{prelude::BASE64_STANDARD, Engine};
+
     use crate::{
         blocking::{object::ObjectOperations, Client},
         common::{ObjectType, StorageClass},
-        object_common::{build_head_object_request, GetObjectOptionsBuilder, PutObjectOptions},
+        object_common::{build_head_object_request, GetObjectOptionsBuilder, PutObjectOptions, PutObjectOptionsBuilder},
     };
 
     static INIT: Once = Once::new();
@@ -260,7 +355,7 @@ mod test_object_blocking {
         setup();
 
         let client = Client::from_env();
-        let result = client.upload_file("yuanyq", "rust-sdk-test/katex.zip", "/home/yuanyq/Downloads/katex.zip", None);
+        let result = client.put_object_from_file("yuanyq", "rust-sdk-test/katex.zip", "/home/yuanyq/Downloads/katex.zip", None);
 
         log::debug!("{:?}", result);
 
@@ -286,7 +381,7 @@ mod test_object_blocking {
             ..Default::default()
         };
 
-        let result = client.upload_file(
+        let result = client.put_object_from_file(
             "yuanyq",
             "rust-sdk-test/Oracle_VirtualBox_Extension_Pack-7.1.4.vbox-extpack",
             "/home/yuanyq/Downloads/Oracle_VirtualBox_Extension_Pack-7.1.4.vbox-extpack",
@@ -325,7 +420,7 @@ mod test_object_blocking {
 
         let output_file = "/home/yuanyq/Downloads/ali-oss-rs-test/katex.zip.1";
 
-        let result = client.download_file("yuanyq", "rust-sdk-test/katex.zip", output_file, Some(options));
+        let result = client.get_object_to_file("yuanyq", "rust-sdk-test/katex.zip", output_file, Some(options));
 
         log::debug!("{:?}", result);
 
@@ -342,7 +437,7 @@ mod test_object_blocking {
 
         let output_file = "/home/yuanyq/Downloads/ali-oss-rs-test/katex.zip.1";
 
-        let result = client.download_file("yuanyq", "rust-sdk-test/katex.zip", output_file, Some(options));
+        let result = client.get_object_to_file("yuanyq", "rust-sdk-test/katex.zip", output_file, Some(options));
 
         log::debug!("{:?}", result);
 
@@ -432,5 +527,51 @@ mod test_object_blocking {
         let dest_meta = client.get_object_metadata(dest_bucket, dest_object, None).unwrap();
 
         assert_eq!(source_meta.etag, dest_meta.etag);
+    }
+
+    #[test]
+    fn test_create_object_from_buffer() {
+        setup();
+        let client = Client::from_env();
+
+        let bucket = "yuanyq";
+        let object = "rust-sdk-test/img-from-buffer.jpg";
+
+        let options = PutObjectOptionsBuilder::new().mime_type("image/jpeg").build();
+
+        let buffer = std::fs::read("/home/yuanyq/Pictures/f69e41cb1642c3360bd5bb6e700a0ecb.jpeg").unwrap();
+
+        let md5 = "1ziAOyOVKo5/xAIvbUEQJA==";
+
+        let ret = client.put_object_from_buffer(bucket, object, buffer, Some(options));
+
+        log::debug!("{:?}", ret);
+
+        assert!(ret.is_ok());
+
+        let meta = client.head_object(bucket, object, None).unwrap();
+        assert_eq!(Some(md5.to_string()), meta.content_md5);
+    }
+
+    #[test]
+    fn test_create_object_from_base64() {
+        setup();
+        let client = Client::from_env();
+
+        let bucket = "yuanyq";
+        let object = "rust-sdk-test/img-from-base64.jpg";
+
+        let options = PutObjectOptionsBuilder::new().mime_type("image/jpeg").build();
+
+        let buffer = std::fs::read("/home/yuanyq/Pictures/f69e41cb1642c3360bd5bb6e700a0ecb.jpeg").unwrap();
+        let base64 = BASE64_STANDARD.encode(&buffer);
+        let md5 = "1ziAOyOVKo5/xAIvbUEQJA==";
+
+        let ret = client.put_object_from_base64(bucket, object, base64, Some(options));
+
+        assert!(ret.is_ok());
+
+        let meta = client.head_object(bucket, object, None).unwrap();
+        assert_eq!(Some(md5.to_string()), meta.content_md5);
     }
 }

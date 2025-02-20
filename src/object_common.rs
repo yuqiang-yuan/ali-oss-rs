@@ -83,7 +83,10 @@ impl TryFrom<String> for ContentEncoding {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
 pub struct PutObjectOptions {
-    ///
+    /// 文件的 mime_type。如果不指定，则从文件名猜测。如果猜测不到，则使用 application/octet-stream
+    /// 如果是直接从字节数组创建 Object 的，则不会猜测这个值，建议显式指定
+    pub mime_type: Option<String>,
+
     /// 指定该Object被下载时网页的缓存行为。取值如下：
     ///
     /// - `no-cache`：不可直接使用缓存，而是先到服务端验证 Object 是否已更新。如果 Object 已更新，表明缓存已过期，需从服务端重新下载 Object；如果 Object 未更新，表明缓存未过期，此时将使用本地缓存。
@@ -153,6 +156,7 @@ pub struct PutObjectOptions {
 }
 
 pub struct PutObjectOptionsBuilder {
+    mime_type: Option<String>,
     cache_control: Option<String>,
     content_disposition: Option<String>,
     content_encoding: Option<ContentEncoding>,
@@ -171,6 +175,7 @@ pub struct PutObjectOptionsBuilder {
 impl PutObjectOptionsBuilder {
     pub fn new() -> Self {
         Self {
+            mime_type: None,
             cache_control: None,
             content_disposition: None,
             content_encoding: None,
@@ -185,6 +190,11 @@ impl PutObjectOptionsBuilder {
             metadata: HashMap::new(),
             tags: HashMap::new(),
         }
+    }
+
+    pub fn mime_type(mut self, mime_type: impl Into<String>) -> Self {
+        self.mime_type = Some(mime_type.into());
+        self
     }
 
     pub fn cache_control(mut self, cache_control: impl Into<String>) -> Self {
@@ -254,6 +264,7 @@ impl PutObjectOptionsBuilder {
 
     pub fn build(self) -> PutObjectOptions {
         PutObjectOptions {
+            mime_type: self.mime_type,
             cache_control: self.cache_control,
             content_disposition: self.content_disposition,
             content_encoding: self.content_encoding,
@@ -489,11 +500,6 @@ pub(crate) fn build_put_object_request(
         return Err(ClientError::Error(format!("invalid object key: {}", object_key)));
     }
 
-    // 文件夹的验证规则
-    if file_path.is_none() && !validate_folder_object_key(object_key) {
-        return Err(ClientError::Error(format!("invalid object key as a folder: {}", object_key)));
-    }
-
     if let Some(options) = &options {
         for (k, v) in &options.metadata {
             if k.is_empty() || !validate_meta_key(k) || v.is_empty() {
@@ -540,6 +546,10 @@ pub(crate) fn build_put_object_request(
     }
 
     if let Some(options) = options {
+        if let Some(s) = &options.mime_type {
+            request = request.add_header("content-type", s);
+        }
+
         if let Some(s) = &options.cache_control {
             request = request.add_header("cache-control", s);
         }

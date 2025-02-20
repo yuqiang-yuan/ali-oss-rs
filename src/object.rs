@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use async_trait::async_trait;
+use base64::{prelude::BASE64_STANDARD, Engine};
 use futures::TryStreamExt;
 use tokio::io::AsyncWriteExt;
 
@@ -12,7 +13,7 @@ use crate::{
     },
     request::{RequestBuilder, RequestMethod},
     util::validate_path,
-    ByteStream, Client,
+    ByteStream, Client, RequestBody,
 };
 
 #[async_trait]
@@ -20,16 +21,54 @@ pub trait ObjectOperations {
     /// Uploads a file to a specified bucket and object key.
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
-    async fn upload_file<S1, S2, P>(&self, bucket_name: S1, object_key: S2, file_path: P, options: Option<PutObjectOptions>) -> ClientResult<PutObjectResult>
+    async fn put_object_from_file<S1, S2, P>(
+        &self,
+        bucket_name: S1,
+        object_key: S2,
+        file_path: P,
+        options: Option<PutObjectOptions>,
+    ) -> ClientResult<PutObjectResult>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send,
         P: AsRef<Path> + Send;
 
-    /// Uploads a file to a specified bucket and object key.
+    /// Create an object from buffer. If you are going to upload a large file, it is recommended to use `upload_file` instead.
+    /// And, it is recommended to set `mime_type` in `options`
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
+    async fn put_object_from_buffer<S1, S2, B>(
+        &self,
+        bucket_name: S1,
+        object_key: S2,
+        buffer: B,
+        options: Option<PutObjectOptions>,
+    ) -> ClientResult<PutObjectResult>
+    where
+        S1: AsRef<str> + Send,
+        S2: AsRef<str> + Send,
+        B: Into<Vec<u8>> + Send;
+
+    /// Create an object from base64 string.
+    /// And, it is recommended to set `mime_type` in `options`
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
+    async fn put_object_from_base64<S1, S2, S3>(
+        &self,
+        bucket_name: S1,
+        object_key: S2,
+        base64_string: S3,
+        options: Option<PutObjectOptions>,
+    ) -> ClientResult<PutObjectResult>
+    where
+        S1: AsRef<str> + Send,
+        S2: AsRef<str> + Send,
+        S3: AsRef<str> + Send;
+
+    /// Download object to local file
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getobject>
-    async fn download_file<S1, S2, P>(&self, bucket_name: S1, object_key: S2, file_path: P, options: Option<GetObjectOptions>) -> ClientResult<()>
+    async fn get_object_to_file<S1, S2, P>(&self, bucket_name: S1, object_key: S2, file_path: P, options: Option<GetObjectOptions>) -> ClientResult<()>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send,
@@ -88,7 +127,13 @@ impl ObjectOperations for Client {
     /// - file length less than 5GB
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
-    async fn upload_file<S1, S2, P>(&self, bucket_name: S1, object_key: S2, file_path: P, options: Option<PutObjectOptions>) -> ClientResult<PutObjectResult>
+    async fn put_object_from_file<S1, S2, P>(
+        &self,
+        bucket_name: S1,
+        object_key: S2,
+        file_path: P,
+        options: Option<PutObjectOptions>,
+    ) -> ClientResult<PutObjectResult>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send,
@@ -109,12 +154,76 @@ impl ObjectOperations for Client {
         Ok(PutObjectResult::from_headers(&headers))
     }
 
+    /// Create an object from buffer. If you are going to upload a large file, it is recommended to use `upload_file` instead.
+    /// And, it is recommended to set `mime_type` in `options`
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
+    async fn put_object_from_buffer<S1, S2, B>(
+        &self,
+        bucket_name: S1,
+        object_key: S2,
+        buffer: B,
+        options: Option<PutObjectOptions>,
+    ) -> ClientResult<PutObjectResult>
+    where
+        S1: AsRef<str> + Send,
+        S2: AsRef<str> + Send,
+        B: Into<Vec<u8>> + Send,
+    {
+        let bucket_name = bucket_name.as_ref();
+        let object_key = object_key.as_ref();
+
+        let object_key = object_key.strip_prefix("/").unwrap_or(object_key);
+        let object_key = object_key.strip_suffix("/").unwrap_or(object_key);
+
+        let data = buffer.into();
+
+        let mut request = build_put_object_request(bucket_name, object_key, None, &options)?
+            .add_header("content-length", data.len().to_string())
+            .body(RequestBody::Bytes(data));
+
+        if let Some(options) = options {
+            if let Some(s) = &options.mime_type {
+                request = request.add_header("content-type", s);
+            }
+        }
+
+        let (headers, _) = self.do_request::<()>(request).await?;
+
+        Ok(PutObjectResult::from_headers(&headers))
+    }
+
+    /// Create an object from base64 string.
+    /// And, it is recommended to set `mime_type` in `options`
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
+    async fn put_object_from_base64<S1, S2, S3>(
+        &self,
+        bucket_name: S1,
+        object_key: S2,
+        base64_string: S3,
+        options: Option<PutObjectOptions>,
+    ) -> ClientResult<PutObjectResult>
+    where
+        S1: AsRef<str> + Send,
+        S2: AsRef<str> + Send,
+        S3: AsRef<str> + Send,
+    {
+        let data = if let Ok(d) = BASE64_STANDARD.decode(base64_string.as_ref()) {
+            d
+        } else {
+            return Err(ClientError::Error("Decoding base64 string failed".to_string()));
+        };
+
+        self.put_object_from_buffer(bucket_name, object_key, data, options).await
+    }
+
     /// Download oss object to local file.
     /// `file_path` is the full file path to save.
     /// If the `file_path` parent path does not exist, it will be created
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getobject>
-    async fn download_file<S1, S2, P>(&self, bucket_name: S1, object_key: S2, file_path: P, options: Option<GetObjectOptions>) -> ClientResult<()>
+    async fn get_object_to_file<S1, S2, P>(&self, bucket_name: S1, object_key: S2, file_path: P, options: Option<GetObjectOptions>) -> ClientResult<()>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send,
@@ -260,10 +369,12 @@ impl ObjectOperations for Client {
 mod test_object_async {
     use std::{collections::HashMap, sync::Once};
 
+    use base64::{prelude::BASE64_STANDARD, Engine};
+
     use crate::{
         common::{ObjectType, StorageClass},
         object::ObjectOperations,
-        object_common::{GetObjectOptionsBuilder, PutObjectOptions},
+        object_common::{GetObjectOptionsBuilder, PutObjectOptions, PutObjectOptionsBuilder},
         Client,
     };
 
@@ -282,7 +393,7 @@ mod test_object_async {
 
         let client = Client::from_env();
         let result = client
-            .upload_file(
+            .put_object_from_file(
                 "yuanyq",
                 "rust-sdk-test/test-pdf-output.pdf",
                 "/home/yuanyq/Downloads/test-pdf-output.pdf",
@@ -315,7 +426,7 @@ mod test_object_async {
         };
 
         let result = client
-            .upload_file(
+            .put_object_from_file(
                 "yuanyq",
                 "rust-sdk-test/云教材发布与管理系统-用户手册.pdf",
                 "/home/yuanyq/Downloads/云教材发布与管理系统-用户手册.pdf",
@@ -341,7 +452,7 @@ mod test_object_async {
         };
 
         let result = client
-            .upload_file("yuanyq", "rust-sdk-test/archived/demo.mp4", "/home/yuanyq/Pictures/demo.mp4", Some(options))
+            .put_object_from_file("yuanyq", "rust-sdk-test/archived/demo.mp4", "/home/yuanyq/Pictures/demo.mp4", Some(options))
             .await;
 
         log::debug!("{:?}", result);
@@ -371,7 +482,7 @@ mod test_object_async {
 
         let output_file = "/home/yuanyq/Downloads/ali-oss-rs-test/katex.zip";
 
-        let result = client.download_file("yuanyq", "rust-sdk-test/katex.zip", output_file, None).await;
+        let result = client.get_object_to_file("yuanyq", "rust-sdk-test/katex.zip", output_file, None).await;
 
         assert!(result.is_ok());
     }
@@ -386,7 +497,7 @@ mod test_object_async {
 
         let options = GetObjectOptionsBuilder::new().range("bytes=0-499").build();
 
-        let result = client.download_file("yuanyq", "rust-sdk-test/katex.zip", output_file, Some(options)).await;
+        let result = client.get_object_to_file("yuanyq", "rust-sdk-test/katex.zip", output_file, Some(options)).await;
 
         assert!(result.is_ok());
 
@@ -410,7 +521,7 @@ mod test_object_async {
         for output_file in invalid_files {
             let options = GetObjectOptionsBuilder::new().range("bytes=0-499").build();
 
-            let result = client.download_file("yuanyq", "rust-sdk-test/katex.zip", output_file, Some(options)).await;
+            let result = client.get_object_to_file("yuanyq", "rust-sdk-test/katex.zip", output_file, Some(options)).await;
 
             assert!(result.is_err());
 
@@ -500,5 +611,51 @@ mod test_object_async {
         let dest_meta = client.get_object_metadata(dest_bucket, dest_object, None).await.unwrap();
 
         assert_eq!(source_meta.etag, dest_meta.etag);
+    }
+
+    #[tokio::test]
+    async fn test_create_object_from_buffer() {
+        setup();
+        let client = Client::from_env();
+
+        let bucket = "yuanyq";
+        let object = "rust-sdk-test/img-from-buffer.jpg";
+
+        let options = PutObjectOptionsBuilder::new().mime_type("image/jpeg").build();
+
+        let buffer = std::fs::read("/home/yuanyq/Pictures/f69e41cb1642c3360bd5bb6e700a0ecb.jpeg").unwrap();
+
+        let md5 = "1ziAOyOVKo5/xAIvbUEQJA==";
+
+        let ret = client.put_object_from_buffer(bucket, object, buffer, Some(options)).await;
+
+        log::debug!("{:?}", ret);
+
+        assert!(ret.is_ok());
+
+        let meta = client.head_object(bucket, object, None).await.unwrap();
+        assert_eq!(Some(md5.to_string()), meta.content_md5);
+    }
+
+    #[tokio::test]
+    async fn test_create_object_from_base64() {
+        setup();
+        let client = Client::from_env();
+
+        let bucket = "yuanyq";
+        let object = "rust-sdk-test/img-from-base64.jpg";
+
+        let options = PutObjectOptionsBuilder::new().mime_type("image/jpeg").build();
+
+        let buffer = std::fs::read("/home/yuanyq/Pictures/f69e41cb1642c3360bd5bb6e700a0ecb.jpeg").unwrap();
+        let base64 = BASE64_STANDARD.encode(&buffer);
+        let md5 = "1ziAOyOVKo5/xAIvbUEQJA==";
+
+        let ret = client.put_object_from_base64(bucket, object, base64, Some(options)).await;
+
+        assert!(ret.is_ok());
+
+        let meta = client.head_object(bucket, object, None).await.unwrap();
+        assert_eq!(Some(md5.to_string()), meta.content_md5);
     }
 }
