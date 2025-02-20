@@ -104,10 +104,10 @@ pub(crate) fn validate_object_key(key: &str) -> bool {
     !key.is_empty() && key.len() <= 1023 && !key.starts_with("/") && !key.starts_with("\\") && !key.ends_with("/") && !key.ends_with("\\")
 }
 
-/// object key for folder
-pub(crate) fn validate_folder_object_key(key: &str) -> bool {
-    !key.is_empty() && key.len() <= 1023 && !key.starts_with("/") && !key.starts_with("\\") && key.ends_with("/")
-}
+// /// object key for folder
+// pub(crate) fn validate_folder_object_key(key: &str) -> bool {
+//     !key.is_empty() && key.len() <= 1023 && !key.starts_with("/") && !key.starts_with("\\") && key.ends_with("/")
+// }
 
 /// Validate oss tagging key and value
 /// 签合法字符集包括大小写字母、数字、空格和下列符号：`+ - = . _ : /`。

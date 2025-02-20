@@ -3,8 +3,8 @@ use std::path::Path;
 use crate::{
     error::{ClientError, ClientResult},
     object_common::{
-        build_copy_object_request, build_get_object_request, build_head_object_request, build_put_object_request, CopyObjectOptions, GetObjectMetadataOptions,
-        GetObjectOptions, HeadObjectOptions, ObjectMetadata, PutObjectOptions, PutObjectResult,
+        build_copy_object_request, build_get_object_request, build_head_object_request, build_put_object_request, CopyObjectOptions, DeleteObjectOptions,
+        GetObjectMetadataOptions, GetObjectOptions, HeadObjectOptions, ObjectMetadata, PutObjectOptions, PutObjectResult,
     },
     request::{RequestBuilder, RequestMethod},
     util::validate_path,
@@ -106,6 +106,14 @@ pub trait ObjectOperations {
         S2: AsRef<str>,
         S3: AsRef<str>,
         S4: AsRef<str>;
+
+    /// Delete an object
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/deleteobject>
+    fn delete_object<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<DeleteObjectOptions>) -> ClientResult<()>
+    where
+        S1: AsRef<str>,
+        S2: AsRef<str>;
 }
 
 impl ObjectOperations for Client {
@@ -327,6 +335,30 @@ impl ObjectOperations for Client {
 
         Ok(())
     }
+
+    /// Delete an object
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/deleteobject>
+    fn delete_object<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<DeleteObjectOptions>) -> ClientResult<()>
+    where
+        S1: AsRef<str>,
+        S2: AsRef<str>,
+    {
+        let mut request = RequestBuilder::new()
+            .method(RequestMethod::Delete)
+            .bucket(bucket_name.as_ref())
+            .object(object_key.as_ref());
+
+        if let Some(options) = options {
+            if let Some(s) = options.version_id {
+                request = request.add_query("versionId", s);
+            }
+        }
+
+        let _ = self.do_request::<()>(request)?;
+
+        Ok(())
+    }
 }
 
 #[cfg(all(test, feature = "blocking"))]
@@ -338,7 +370,7 @@ mod test_object_blocking {
     use crate::{
         blocking::{object::ObjectOperations, Client},
         common::{ObjectType, StorageClass},
-        object_common::{build_head_object_request, GetObjectOptionsBuilder, PutObjectOptions, PutObjectOptionsBuilder},
+        object_common::{build_head_object_request, DeleteObjectOptions, GetObjectOptionsBuilder, PutObjectOptions, PutObjectOptionsBuilder},
     };
 
     static INIT: Once = Once::new();
@@ -573,5 +605,17 @@ mod test_object_blocking {
 
         let meta = client.head_object(bucket, object, None).unwrap();
         assert_eq!(Some(md5.to_string()), meta.content_md5);
+    }
+
+    #[test]
+    fn test_delete_object() {
+        setup();
+        let client = Client::from_env();
+
+        let bucket = "yuanyq";
+        let object = "rust-sdk-test/img-from-buffer.jpg";
+
+        let ret = client.delete_object(bucket, object, None);
+        assert!(ret.is_ok());
     }
 }

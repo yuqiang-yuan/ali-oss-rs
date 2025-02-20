@@ -8,8 +8,8 @@ use tokio::io::AsyncWriteExt;
 use crate::{
     error::{ClientError, ClientResult},
     object_common::{
-        build_copy_object_request, build_get_object_request, build_head_object_request, build_put_object_request, CopyObjectOptions, GetObjectMetadataOptions,
-        GetObjectOptions, HeadObjectOptions, ObjectMetadata, PutObjectOptions, PutObjectResult,
+        build_copy_object_request, build_get_object_request, build_head_object_request, build_put_object_request, CopyObjectOptions, DeleteObjectOptions,
+        GetObjectMetadataOptions, GetObjectOptions, HeadObjectOptions, ObjectMetadata, PutObjectOptions, PutObjectResult,
     },
     request::{RequestBuilder, RequestMethod},
     util::validate_path,
@@ -114,6 +114,14 @@ pub trait ObjectOperations {
         S2: AsRef<str> + Send,
         S3: AsRef<str> + Send,
         S4: AsRef<str> + Send;
+
+    /// Delete an object
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/deleteobject>
+    async fn delete_object<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<DeleteObjectOptions>) -> ClientResult<()>
+    where
+        S1: AsRef<str> + Send,
+        S2: AsRef<str> + Send;
 }
 
 #[async_trait]
@@ -360,6 +368,30 @@ impl ObjectOperations for Client {
         )?;
 
         let (_, _) = self.do_request::<()>(request).await?;
+
+        Ok(())
+    }
+
+    /// Delete an object
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/deleteobject>
+    async fn delete_object<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<DeleteObjectOptions>) -> ClientResult<()>
+    where
+        S1: AsRef<str> + Send,
+        S2: AsRef<str> + Send,
+    {
+        let mut request = RequestBuilder::new()
+            .method(RequestMethod::Delete)
+            .bucket(bucket_name.as_ref())
+            .object(object_key.as_ref());
+
+        if let Some(options) = options {
+            if let Some(s) = options.version_id {
+                request = request.add_query("versionId", s);
+            }
+        }
+
+        let _ = self.do_request::<()>(request).await?;
 
         Ok(())
     }
@@ -657,5 +689,17 @@ mod test_object_async {
 
         let meta = client.head_object(bucket, object, None).await.unwrap();
         assert_eq!(Some(md5.to_string()), meta.content_md5);
+    }
+
+    #[tokio::test]
+    async fn test_delete_object() {
+        setup();
+        let client = Client::from_env();
+
+        let bucket = "yuanyq";
+        let object = "rust-sdk-test/img-from-base64.jpg";
+
+        let ret = client.delete_object(bucket, object, None).await;
+        assert!(ret.is_ok());
     }
 }

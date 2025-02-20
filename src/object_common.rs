@@ -4,7 +4,7 @@ use crate::{
     common::{build_tag_string, Acl, MetadataDirective, ObjectType, ServerSideEncryptionAlgorithm, StorageClass, TagDirective},
     error::{ClientError, ClientResult},
     request::{RequestBuilder, RequestMethod},
-    util::{validate_folder_object_key, validate_meta_key, validate_object_key, validate_tag_key, validate_tag_value},
+    util::{validate_meta_key, validate_object_key, validate_tag_key, validate_tag_value},
 };
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
@@ -1003,6 +1003,13 @@ impl Default for CopyObjectOptionsBuilder {
     }
 }
 
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+pub struct DeleteObjectOptions {
+    pub version_id: Option<String>,
+}
+
 pub(crate) fn build_copy_object_request(
     source_bucket_name: &str,
     source_object_key: &str,
@@ -1062,11 +1069,11 @@ pub(crate) fn build_copy_object_request(
         }
 
         if let Some(md) = options.metadata_directive {
-            request = request.add_header("x-oss-metadata-directive", md.to_string());
+            request = request.add_header("x-oss-metadata-directive", md);
         }
 
         if let Some(a) = &options.server_side_encryption {
-            request = request.add_header("x-oss-server-side-encryption", a.to_string());
+            request = request.add_header("x-oss-server-side-encryption", a);
         }
 
         if let Some(s) = &options.server_side_encryption_key_id {
@@ -1074,15 +1081,15 @@ pub(crate) fn build_copy_object_request(
         }
 
         if let Some(acl) = options.object_acl {
-            request = request.add_header("x-oss-object-acl", acl.to_string());
+            request = request.add_header("x-oss-object-acl", acl);
         }
 
-        if let Some(storage_class) = options.storage_class {
-            request = request.add_header("x-oss-storage-class", storage_class.to_string());
+        if let Some(sc) = options.storage_class {
+            request = request.add_header("x-oss-storage-class", sc);
         }
 
         if let Some(td) = options.tag_directive {
-            request = request.add_header("x-oss-tag-directive", td.to_string());
+            request = request.add_header("x-oss-tag-directive", td);
         }
 
         if !options.tags.is_empty() {
