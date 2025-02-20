@@ -134,6 +134,7 @@ impl RequestBuilder {
     }
 
     /// Add only the header name to additional headers
+    #[allow(dead_code)]
     pub fn add_additional_header_name<S>(mut self, name: S) -> Self
     where
         S: AsRef<str>,
@@ -149,35 +150,40 @@ impl RequestBuilder {
     }
 
     pub fn content_type(mut self, content_type: &str) -> Self {
-        self.headers.insert("Content-Type".to_string(), content_type.to_string());
+        self.headers.insert("content-type".to_string(), content_type.to_string());
         self
     }
 
-    pub fn content_length(mut self, len: usize) -> Self {
-        self.headers.insert("Content-Length".to_string(), len.to_string());
+    pub fn content_length(mut self, len: u64) -> Self {
+        self.headers.insert("content-length".to_string(), len.to_string());
         self
     }
 
     pub fn text_body<S: Into<String>>(self, text: S) -> Self {
-        self.body(RequestBody::Text(text.into()))
+        let s = text.into();
+        self.content_length(s.len() as u64).body(RequestBody::Text(s))
     }
 
     pub fn bytes_body<B: Into<Vec<u8>>>(self, bytes: B) -> Self {
-        self.body(RequestBody::Bytes(bytes.into()))
+        let data = bytes.into();
+        self.content_length(data.len() as u64).body(RequestBody::Bytes(data))
     }
 
     pub fn file_body<P: Into<PathBuf>>(self, path: P) -> Self {
         self.body(RequestBody::File(path.into()))
     }
 
+    #[allow(dead_code)]
     pub fn headers_mut(&mut self) -> &mut HashMap<String, String> {
         &mut self.headers
     }
 
+    #[allow(dead_code)]
     pub fn additional_headers_mut(&mut self) -> &mut HashSet<String> {
         &mut self.additional_headers
     }
 
+    #[allow(dead_code)]
     pub fn query_mut(&mut self) -> &mut HashMap<String, String> {
         &mut self.query
     }

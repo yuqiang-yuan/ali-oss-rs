@@ -6,7 +6,7 @@ use crate::{
         StorageClass, TransferAcceleration, Versioning,
     },
     error::{ClientError, ClientResult},
-    request::{RequestBody, RequestBuilder, RequestMethod},
+    request::{RequestBuilder, RequestMethod},
 };
 
 /// Summary information of a bucket.
@@ -638,8 +638,7 @@ pub(crate) fn build_put_bucket_request(bucket_name: &str, config: &PutBucketConf
         .method(RequestMethod::Put)
         .bucket(bucket_name)
         .content_type("application/xml")
-        .content_length(xml.len())
-        .body(RequestBody::Text(xml));
+        .text_body(xml);
 
     if let Some(options) = options {
         if let Some(acl) = &options.acl {

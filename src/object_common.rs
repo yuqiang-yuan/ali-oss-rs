@@ -4,7 +4,7 @@ use crate::{
     common::{build_tag_string, Acl, MetadataDirective, ObjectType, ServerSideEncryptionAlgorithm, StorageClass, TagDirective},
     error::{ClientError, ClientResult},
     request::{RequestBuilder, RequestMethod},
-    util::{validate_meta_key, validate_object_key, validate_tag_key, validate_tag_value},
+    util::{sanitize_etag, validate_meta_key, validate_object_key, validate_tag_key, validate_tag_value},
 };
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
@@ -79,6 +79,9 @@ impl TryFrom<String> for ContentEncoding {
     }
 }
 
+/// Options for putting object
+///
+/// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
 #[derive(Debug, Clone, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
@@ -288,9 +291,9 @@ impl Default for PutObjectOptionsBuilder {
     }
 }
 
+/// Options for getting object
 ///
-/// Get object options
-///
+/// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getobject>
 pub struct GetObjectOptions {
     // The following fields are header items
     /// 指定文件传输的范围。
@@ -485,6 +488,10 @@ impl Default for GetObjectOptionsBuilder {
     }
 }
 
+/// A "placeholder" struct for adding more fields in the future
+#[derive(Debug)]
+pub struct GetObjectResult;
+
 pub(crate) fn build_put_object_request(
     bucket_name: &str,
     object_key: &str,
@@ -537,8 +544,8 @@ pub(crate) fn build_put_object_request(
         }
 
         request = request
-            .add_header("content-type", mime_guess::from_path(file).first_or_octet_stream())
-            .add_header("content-length", file_meta.len().to_string())
+            .content_type(mime_guess::from_path(file).first_or_octet_stream().as_ref())
+            .content_length(file_meta.len())
             .file_body(file);
     } else {
         // creating folder
@@ -604,6 +611,9 @@ pub(crate) fn build_put_object_request(
     Ok(request)
 }
 
+/// Options for getting object metadata
+///
+/// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getobjectmeta>
 #[derive(Debug, Clone, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
@@ -611,6 +621,9 @@ pub struct GetObjectMetadataOptions {
     pub version_id: Option<String>,
 }
 
+/// Options for heading object
+///
+/// Official document: <https://help.aliyun.com/zh/oss/developer-reference/headobject>
 #[derive(Debug, Clone, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
@@ -689,8 +702,10 @@ impl Default for HeadObjectOptionsBuilder {
 pub struct ObjectMetadata {
     pub request_id: String,
     pub content_length: u64,
-    pub etag: Option<String>,
-    pub hash_crc64ecma: Option<String>,
+
+    /// 已经移除了首尾双引号（`"`）之后的字符串
+    pub etag: String,
+    pub hash_crc64ecma: Option<u64>,
 
     /// Object 通过生命周期规则转储为冷归档或者深度冷归档存储类型的时间。
     pub transition_time: Option<String>,
@@ -766,8 +781,8 @@ impl From<HashMap<String, String>> for ObjectMetadata {
         Self {
             request_id: headers.remove("x-oss-request-id").unwrap_or("".to_string()),
             content_length: headers.remove("content-length").unwrap_or("0".to_string()).parse().unwrap_or(0),
-            etag: headers.remove("etag"),
-            hash_crc64ecma: headers.remove("x-oss-hash-crc64ecma"),
+            etag: sanitize_etag(headers.remove("etag").unwrap_or_default()),
+            hash_crc64ecma: headers.remove("x-oss-hash-crc64ecma").map(|s| s.parse::<u64>().unwrap_or(0)),
             transition_time: headers.remove("x-oss-transition-time"),
             last_access_time: headers.remove("x-oss-last-access-time"),
             last_modified: headers.remove("last-modified"),
@@ -820,6 +835,9 @@ impl From<HashMap<String, String>> for ObjectMetadata {
     }
 }
 
+/// Options for copying objects
+///
+/// Official document: <https://help.aliyun.com/zh/oss/developer-reference/copyobject>
 #[derive(Debug, Clone, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
@@ -1003,12 +1021,19 @@ impl Default for CopyObjectOptionsBuilder {
     }
 }
 
+/// Options for deleting object
 #[derive(Debug, Clone, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
 pub struct DeleteObjectOptions {
     pub version_id: Option<String>,
 }
+
+/// A "placeholder" struct for adding more fields in the future
+pub struct DeleteObjectResult;
+
+/// A "placeholder" struct for adding more fields in the future
+pub struct CopyObjectResult;
 
 pub(crate) fn build_copy_object_request(
     source_bucket_name: &str,
@@ -1192,31 +1217,47 @@ pub(crate) fn build_head_object_request(bucket_name: &str, object_key: &str, opt
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
 pub struct PutObjectResult {
-    /// ETag
-    pub etag: Option<String>,
+    pub content_length: u64,
+    pub request_id: String,
+
+    /// 已经移除了首尾双引号（`"`）之后的字符串
+    pub etag: String,
 
     /// 文件 MD5 值，Base64 编码的字符串
-    pub content_md5: Option<String>,
+    pub content_md5: String,
 
-    /// 文件 CRC64 值，16 进制字符串
-    pub hash_crc64ecma: Option<String>,
+    /// 文件 CRC64 值
+    pub hash_crc64ecma: u64,
 
     /// 表示文件的版本 ID。仅当您将文件上传至已开启版本控制状态的 Bucket 时，会返回该响应头。
     pub version_id: Option<String>,
 }
 
-impl PutObjectResult {
-    pub fn from_headers(headers: &HashMap<String, String>) -> Self {
-        let etag = headers.get("etag").map(|v| v.to_string());
-        let content_md5 = headers.get("content-md5").map(|v| v.to_string());
-        let hash_crc64ecma = headers.get("x-oss-hash-crc64ecma").map(|v| v.to_string());
-        let version_id = headers.get("x-oss-version-id").map(|v| v.to_string());
-
+impl From<HashMap<String, String>> for PutObjectResult {
+    fn from(mut headers: HashMap<String, String>) -> Self {
         Self {
-            etag,
-            content_md5,
-            hash_crc64ecma,
-            version_id,
+            content_length: headers.remove("content-length").unwrap_or("0".to_string()).parse().unwrap_or(0),
+            request_id: headers.remove("x-oss-server-id").unwrap_or_default(),
+            etag: sanitize_etag(headers.remove("etag").unwrap_or_default()),
+            content_md5: headers.remove("content-md5").unwrap_or_default(),
+            hash_crc64ecma: headers.remove("x-oss-hash-crc64ecma").unwrap_or("0".to_string()).parse().unwrap_or(0),
+            version_id: headers.remove("x-oss-version-id"),
+        }
+    }
+}
+
+/// Options for appending object
+pub type AppendObjectOptions = PutObjectOptions;
+pub type AppendObjectOptionsBuilder = PutObjectOptionsBuilder;
+
+pub struct AppendObjectResult {
+    pub next_append_position: u64,
+}
+
+impl From<HashMap<String, String>> for AppendObjectResult {
+    fn from(mut headers: HashMap<String, String>) -> Self {
+        Self {
+            next_append_position: headers.remove("x-oss-next-append-position").unwrap_or("0".to_string()).parse().unwrap_or(0),
         }
     }
 }

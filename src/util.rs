@@ -60,6 +60,13 @@ pub(crate) fn sha256(data: &[u8]) -> Vec<u8> {
     data.to_vec()
 }
 
+/// Consumes the ETag string and remove the prefix and suffix double quotation mark
+pub(crate) fn sanitize_etag(s: String) -> String {
+    let tag = s.strip_prefix("\"").unwrap_or(s.as_str());
+    let tag = tag.strip_suffix("\"").unwrap_or(tag);
+    tag.to_string()
+}
+
 // pub(crate) fn debug_request(req: &reqwest::Request) {
 //     debug!("Request Details:");
 //     debug!("---------------");

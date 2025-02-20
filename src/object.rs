@@ -9,12 +9,13 @@ use tokio::io::AsyncWriteExt;
 use crate::{
     error::{ClientError, ClientResult},
     object_common::{
-        build_copy_object_request, build_get_object_request, build_head_object_request, build_put_object_request, CopyObjectOptions, DeleteObjectOptions,
-        GetObjectMetadataOptions, GetObjectOptions, HeadObjectOptions, ObjectMetadata, PutObjectOptions, PutObjectResult,
+        build_copy_object_request, build_get_object_request, build_head_object_request, build_put_object_request, AppendObjectOptions, AppendObjectResult,
+        CopyObjectOptions, CopyObjectResult, DeleteObjectOptions, DeleteObjectResult, GetObjectMetadataOptions, GetObjectOptions, GetObjectResult,
+        HeadObjectOptions, ObjectMetadata, PutObjectOptions, PutObjectResult,
     },
     request::{RequestBuilder, RequestMethod},
     util::validate_path,
-    ByteStream, Client, RequestBody,
+    ByteStream, Client,
 };
 
 #[async_trait]
@@ -66,10 +67,32 @@ pub trait ObjectOperations {
         S2: AsRef<str> + Send,
         S3: AsRef<str> + Send;
 
+    /// Append object.
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/appendobject>
+    async fn append_object_from_file<S1, S2, P>(
+        &self,
+        bucket_name: S1,
+        object_key: S2,
+        file_path: P,
+        position: u64,
+        options: Option<AppendObjectOptions>,
+    ) -> ClientResult<AppendObjectResult>
+    where
+        S1: AsRef<str> + Send,
+        S2: AsRef<str> + Send,
+        P: AsRef<Path> + Send;
+
     /// Download object to local file
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getobject>
-    async fn get_object_to_file<S1, S2, P>(&self, bucket_name: S1, object_key: S2, file_path: P, options: Option<GetObjectOptions>) -> ClientResult<()>
+    async fn get_object_to_file<S1, S2, P>(
+        &self,
+        bucket_name: S1,
+        object_key: S2,
+        file_path: P,
+        options: Option<GetObjectOptions>,
+    ) -> ClientResult<GetObjectResult>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send,
@@ -117,7 +140,7 @@ pub trait ObjectOperations {
         dest_bucket_name: S3,
         dest_object_key: S4,
         options: Option<CopyObjectOptions>,
-    ) -> ClientResult<()>
+    ) -> ClientResult<CopyObjectResult>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send,
@@ -127,7 +150,7 @@ pub trait ObjectOperations {
     /// Delete an object
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/deleteobject>
-    async fn delete_object<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<DeleteObjectOptions>) -> ClientResult<()>
+    async fn delete_object<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<DeleteObjectOptions>) -> ClientResult<DeleteObjectResult>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send;
@@ -168,7 +191,7 @@ impl ObjectOperations for Client {
 
         let (headers, _) = self.do_request::<()>(request).await?;
 
-        Ok(PutObjectResult::from_headers(&headers))
+        Ok(headers.into())
     }
 
     /// Create an object from buffer. If you are going to upload a large file, it is recommended to use `upload_file` instead.
@@ -195,19 +218,17 @@ impl ObjectOperations for Client {
 
         let data = buffer.into();
 
-        let mut request = build_put_object_request(bucket_name, object_key, None, &options)?
-            .add_header("content-length", data.len().to_string())
-            .body(RequestBody::Bytes(data));
+        let mut request = build_put_object_request(bucket_name, object_key, None, &options)?.bytes_body(data);
 
         if let Some(options) = options {
             if let Some(s) = &options.mime_type {
-                request = request.add_header("content-type", s);
+                request = request.content_type(s);
             }
         }
 
         let (headers, _) = self.do_request::<()>(request).await?;
 
-        Ok(PutObjectResult::from_headers(&headers))
+        Ok(headers.into())
     }
 
     /// Create an object from base64 string.
@@ -235,12 +256,55 @@ impl ObjectOperations for Client {
         self.put_object_from_buffer(bucket_name, object_key, data, options).await
     }
 
+    /// Append object.
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/appendobject>
+    async fn append_object_from_file<S1, S2, P>(
+        &self,
+        bucket_name: S1,
+        object_key: S2,
+        file_path: P,
+        position: u64,
+        options: Option<AppendObjectOptions>,
+    ) -> ClientResult<AppendObjectResult>
+    where
+        S1: AsRef<str> + Send,
+        S2: AsRef<str> + Send,
+        P: AsRef<Path> + Send,
+    {
+        let bucket_name = bucket_name.as_ref();
+        let object_key = object_key.as_ref();
+
+        let object_key = object_key.strip_prefix("/").unwrap_or(object_key);
+        let object_key = object_key.strip_suffix("/").unwrap_or(object_key);
+
+        let file_path = file_path.as_ref();
+
+        let mut request = build_put_object_request(bucket_name, object_key, Some(file_path), &options)?;
+
+        // alter the request method and add append object query parameters
+        request = request
+            .method(RequestMethod::Post)
+            .add_query("append", "")
+            .add_query("position", position.to_string());
+
+        let (headers, _) = self.do_request::<()>(request).await?;
+
+        Ok(headers.into())
+    }
+
     /// Download oss object to local file.
     /// `file_path` is the full file path to save.
     /// If the `file_path` parent path does not exist, it will be created
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getobject>
-    async fn get_object_to_file<S1, S2, P>(&self, bucket_name: S1, object_key: S2, file_path: P, options: Option<GetObjectOptions>) -> ClientResult<()>
+    async fn get_object_to_file<S1, S2, P>(
+        &self,
+        bucket_name: S1,
+        object_key: S2,
+        file_path: P,
+        options: Option<GetObjectOptions>,
+    ) -> ClientResult<GetObjectResult>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send,
@@ -279,7 +343,7 @@ impl ObjectOperations for Client {
 
         file.flush().await?;
 
-        Ok(())
+        Ok(GetObjectResult)
     }
 
     /// Create a "folder".
@@ -304,7 +368,7 @@ impl ObjectOperations for Client {
 
         let (headers, _) = self.do_request::<()>(request).await?;
 
-        Ok(PutObjectResult::from_headers(&headers))
+        Ok(headers.into())
     }
 
     /// Get object metadata.
@@ -378,7 +442,7 @@ impl ObjectOperations for Client {
         dest_bucket_name: S3,
         dest_object_key: S4,
         options: Option<CopyObjectOptions>,
-    ) -> ClientResult<()>
+    ) -> ClientResult<CopyObjectResult>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send,
@@ -395,13 +459,13 @@ impl ObjectOperations for Client {
 
         let (_, _) = self.do_request::<()>(request).await?;
 
-        Ok(())
+        Ok(CopyObjectResult)
     }
 
     /// Delete an object
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/deleteobject>
-    async fn delete_object<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<DeleteObjectOptions>) -> ClientResult<()>
+    async fn delete_object<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<DeleteObjectOptions>) -> ClientResult<DeleteObjectResult>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send,
@@ -419,7 +483,7 @@ impl ObjectOperations for Client {
 
         let _ = self.do_request::<()>(request).await?;
 
-        Ok(())
+        Ok(DeleteObjectResult)
     }
 }
 
@@ -599,10 +663,10 @@ mod test_object_async {
         assert!(result.is_ok());
 
         let meta = result.unwrap();
-
+        log::debug!("{:?}", meta);
         assert_eq!(22966826, meta.content_length);
-        assert_eq!(Some("\"B752E1A13502E231AC4AA0E1D91F887C\"".to_string()), meta.etag);
-        assert_eq!(Some("7873641174252289613".to_string()), meta.hash_crc64ecma);
+        assert_eq!("B752E1A13502E231AC4AA0E1D91F887C", meta.etag);
+        assert_eq!(Some(7873641174252289613u64), meta.hash_crc64ecma);
         assert_eq!(Some("Tue, 18 Feb 2025 15:03:23 GMT".to_string()), meta.last_modified);
     }
 
@@ -618,10 +682,10 @@ mod test_object_async {
         assert!(result.is_ok());
 
         let meta = result.unwrap();
-
+        log::debug!("{:#?}", meta);
         assert_eq!(22966826, meta.content_length);
-        assert_eq!(Some("\"B752E1A13502E231AC4AA0E1D91F887C\"".to_string()), meta.etag);
-        assert_eq!(Some("7873641174252289613".to_string()), meta.hash_crc64ecma);
+        assert_eq!("B752E1A13502E231AC4AA0E1D91F887C", meta.etag);
+        assert_eq!(Some(7873641174252289613), meta.hash_crc64ecma);
         assert_eq!(Some("Tue, 18 Feb 2025 15:03:23 GMT".to_string()), meta.last_modified);
         assert_eq!(Some(ObjectType::Normal), meta.object_type);
         assert_eq!(Some(StorageClass::Standard), meta.storage_class);
@@ -745,5 +809,37 @@ mod test_object_async {
         let ret = client.exists(bucket, object, None).await;
         assert!(ret.is_ok());
         assert!(ret.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_append_object() {
+        setup();
+        let client = Client::from_env();
+
+        let bucket = "yuanyq";
+        let object = "rust-sdk-test/img-appended-from-file.jpg";
+
+        let file1 = "/home/yuanyq/Pictures/test-image-part-1.data";
+        let file2 = "/home/yuanyq/Pictures/test-image-part-2.data";
+        let file3 = "/home/yuanyq/Pictures/test-image-part-3.data";
+
+        let ret1 = client.append_object_from_file(bucket, object, file1, 0, None).await;
+
+        assert!(ret1.is_ok());
+
+        let next_pos = ret1.unwrap().next_append_position;
+        assert_eq!(61929, next_pos);
+
+        let ret2 = client.append_object_from_file(bucket, object, file2, next_pos, None).await;
+        assert!(ret2.is_ok());
+
+        let next_pos = ret2.unwrap().next_append_position;
+        assert_eq!(61929 * 2, next_pos);
+
+        let ret3 = client.append_object_from_file(bucket, object, file3, next_pos, None).await;
+        assert!(ret3.is_ok());
+
+        let meta = client.head_object(bucket, object, None).await;
+        log::debug!("{:#?}", meta.unwrap());
     }
 }
