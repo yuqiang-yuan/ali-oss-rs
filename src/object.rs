@@ -3,6 +3,7 @@ use std::path::Path;
 use async_trait::async_trait;
 use base64::{prelude::BASE64_STANDARD, Engine};
 use futures::TryStreamExt;
+use reqwest::StatusCode;
 use tokio::io::AsyncWriteExt;
 
 use crate::{
@@ -86,6 +87,14 @@ pub trait ObjectOperations {
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getobjectmeta>
     async fn get_object_metadata<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<GetObjectMetadataOptions>) -> ClientResult<ObjectMetadata>
+    where
+        S1: AsRef<str> + Send,
+        S2: AsRef<str> + Send;
+
+    /// Check if the object exists or not using get object metadata
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getobjectmeta>
+    async fn exists<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<GetObjectMetadataOptions>) -> ClientResult<bool>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send;
@@ -323,6 +332,23 @@ impl ObjectOperations for Client {
 
         let (headers, _) = self.do_request::<()>(request).await?;
         Ok(ObjectMetadata::from(headers))
+    }
+
+    /// Check if the object exists or not using get object metadata
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getobjectmeta>
+    async fn exists<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<GetObjectMetadataOptions>) -> ClientResult<bool>
+    where
+        S1: AsRef<str> + Send,
+        S2: AsRef<str> + Send,
+    {
+        match self.get_object_metadata(bucket_name, object_key, options).await {
+            Ok(_) => Ok(true),
+            Err(e) => match e {
+                ClientError::StatusError(status) if status == StatusCode::NOT_FOUND => Ok(false),
+                _ => Err(e),
+            },
+        }
     }
 
     /// Get object metadata which is more detail than [`get_object_metadata`]
@@ -701,5 +727,23 @@ mod test_object_async {
 
         let ret = client.delete_object(bucket, object, None).await;
         assert!(ret.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_exists() {
+        setup();
+        let client = Client::from_env();
+
+        let bucket = "yuanyq";
+        let object = "rust-sdk-test/img-from-base64.jpg";
+
+        let ret = client.exists(bucket, object, None).await;
+        assert!(ret.is_ok());
+        assert!(!ret.unwrap());
+
+        let object = "test.php";
+        let ret = client.exists(bucket, object, None).await;
+        assert!(ret.is_ok());
+        assert!(ret.unwrap());
     }
 }

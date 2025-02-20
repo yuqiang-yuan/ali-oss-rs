@@ -1,5 +1,8 @@
 use std::path::Path;
 
+use base64::{prelude::BASE64_STANDARD, Engine};
+use reqwest::StatusCode;
+
 use crate::{
     error::{ClientError, ClientResult},
     object_common::{
@@ -12,8 +15,6 @@ use crate::{
 };
 
 use super::{BytesBody, Client};
-
-use base64::{prelude::BASE64_STANDARD, Engine};
 
 pub trait ObjectOperations {
     /// Uploads a file to a specified bucket and object key.
@@ -78,6 +79,14 @@ pub trait ObjectOperations {
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getobjectmeta>
     fn get_object_metadata<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<GetObjectMetadataOptions>) -> ClientResult<ObjectMetadata>
+    where
+        S1: AsRef<str>,
+        S2: AsRef<str>;
+
+    /// Check if the object exists or not using get object metadata
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getobjectmeta>
+    fn exists<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<GetObjectMetadataOptions>) -> ClientResult<bool>
     where
         S1: AsRef<str>,
         S2: AsRef<str>;
@@ -287,6 +296,23 @@ impl ObjectOperations for Client {
 
         let (headers, _) = self.do_request::<()>(request)?;
         Ok(ObjectMetadata::from(headers))
+    }
+
+    /// Check if the object exists or not using get object metadata
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getobjectmeta>
+    fn exists<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<GetObjectMetadataOptions>) -> ClientResult<bool>
+    where
+        S1: AsRef<str>,
+        S2: AsRef<str>,
+    {
+        match self.get_object_metadata(bucket_name, object_key, options) {
+            Ok(_) => Ok(true),
+            Err(e) => match e {
+                ClientError::StatusError(status) if status == StatusCode::NOT_FOUND => Ok(false),
+                _ => Err(e),
+            },
+        }
     }
 
     /// Head object
@@ -617,5 +643,23 @@ mod test_object_blocking {
 
         let ret = client.delete_object(bucket, object, None);
         assert!(ret.is_ok());
+    }
+
+    #[test]
+    fn test_exists() {
+        setup();
+        let client = Client::from_env();
+
+        let bucket = "yuanyq";
+        let object = "rust-sdk-test/img-from-base64.jpg";
+
+        let ret = client.exists(bucket, object, None);
+        assert!(ret.is_ok());
+        assert!(!ret.unwrap());
+
+        let object = "test.php";
+        let ret = client.exists(bucket, object, None);
+        assert!(ret.is_ok());
+        assert!(ret.unwrap());
     }
 }

@@ -29,3 +29,5 @@ Aliyun Object Storage Service (OSS) is a massive, secure, cost-effective, and hi
   - Get object metadata
   - Head object: get detail metadata of an object
   - Copy object
+  - Delete object
+  - Check does object exist
