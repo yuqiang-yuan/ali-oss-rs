@@ -16,8 +16,9 @@ use thiserror::Error;
 //   <RecommendDoc>https://api.aliyun.com/troubleshoot?q=0031-00000001</RecommendDoc>
 // </Error>
 // ```
-
 #[derive(Debug, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
 pub struct ErrorResponse {
     pub code: String,
     pub message: String,

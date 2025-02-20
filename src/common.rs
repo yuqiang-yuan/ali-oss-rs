@@ -1,5 +1,5 @@
 //! Common types: structs and enumerations
-use std::fmt::Display;
+use std::{collections::HashMap, fmt::Display};
 
 use quick_xml::events::Event;
 
@@ -297,6 +297,12 @@ impl OnOff {
     }
 }
 
+impl AsRef<str> for OnOff {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
 impl Display for OnOff {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.as_str())
@@ -359,6 +365,12 @@ impl Versioning {
     }
 }
 
+impl AsRef<str> for Versioning {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
 impl Display for Versioning {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.as_str())
@@ -417,6 +429,12 @@ impl ServerSideEncryptionAlgorithm {
     }
 }
 
+impl AsRef<str> for ServerSideEncryptionAlgorithm {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
 impl Display for ServerSideEncryptionAlgorithm {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.as_str())
@@ -468,12 +486,18 @@ pub struct ServerSideEncryptionRule {
 ///
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
 pub enum ObjectType {
     #[default]
+    #[cfg_attr(feature = "serde", serde(rename = "Normal"))]
     Normal,
+
+    #[cfg_attr(feature = "serde", serde(rename = "Multipart"))]
     Multipart,
+
+    #[cfg_attr(feature = "serde", serde(rename = "Appendable"))]
     Appendable,
+
+    #[cfg_attr(feature = "serde", serde(rename = "Symlink"))]
     Symlink,
 }
 
@@ -485,6 +509,12 @@ impl ObjectType {
             ObjectType::Appendable => "Appendable",
             ObjectType::Symlink => "Symlink",
         }
+    }
+}
+
+impl AsRef<str> for ObjectType {
+    fn as_ref(&self) -> &str {
+        self.as_str()
     }
 }
 
@@ -516,4 +546,152 @@ impl TryFrom<&String> for ObjectType {
     fn try_from(value: &String) -> Result<Self, Self::Error> {
         Self::try_from(value.as_str())
     }
+}
+
+/// How to apply metadata rule while coping object
+#[derive(Debug, Clone, Copy, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum MetadataDirective {
+    /// 复制源 Object 的元数据到目标 Object。
+    /// OSS 不会复制源 Object 的 `x-oss-server-side-encryption` 属性配置到目标 Object。
+    /// 目标 Object 的服务器端加密编码方式取决于当前拷贝操作是否指定了 `x-oss-server-side-encryption`。
+    #[default]
+    #[cfg_attr(feature = "serde", serde(rename = "COPY"))]
+    Copy,
+
+    /// 忽略源 Object 的元数据，直接采用请求中指定的元数据
+    #[cfg_attr(feature = "serde", serde(rename = "REPLACE"))]
+    Replace,
+}
+
+impl MetadataDirective {
+    pub fn as_str(&self) -> &str {
+        match self {
+            MetadataDirective::Copy => "COPY",
+            MetadataDirective::Replace => "REPLACE",
+        }
+    }
+}
+
+impl AsRef<str> for MetadataDirective {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl Display for MetadataDirective {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MetadataDirective::Copy => write!(f, "COPY"),
+            MetadataDirective::Replace => write!(f, "REPLACE"),
+        }
+    }
+}
+
+impl TryFrom<&str> for MetadataDirective {
+    type Error = ClientError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "COPY" => Ok(MetadataDirective::Copy),
+            "REPLACE" => Ok(MetadataDirective::Replace),
+            _ => Err(ClientError::Error(format!("Invalid MetadataDirective value: {}", value))),
+        }
+    }
+}
+
+impl TryFrom<String> for MetadataDirective {
+    type Error = ClientError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::try_from(value.as_str())
+    }
+}
+
+impl TryFrom<&String> for MetadataDirective {
+    type Error = ClientError;
+
+    fn try_from(value: &String) -> Result<Self, Self::Error> {
+        Self::try_from(value.as_str())
+    }
+}
+
+/// How to apply taggings rule while coping object
+#[derive(Debug, Clone, Copy, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum TagDirective {
+    /// 复制源 Object 的标签数据到目标 Object。
+    #[default]
+    #[cfg_attr(feature = "serde", serde(rename = "Copy"))]
+    Copy,
+
+    /// 忽略源 Object 的对象标签，直接采用请求中指定的对象标签。
+    #[cfg_attr(feature = "serde", serde(rename = "Replace"))]
+    Replace,
+}
+
+impl TagDirective {
+    pub fn as_str(&self) -> &str {
+        match self {
+            TagDirective::Copy => "Copy",
+            TagDirective::Replace => "Replace",
+        }
+    }
+}
+
+impl AsRef<str> for TagDirective {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl Display for TagDirective {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TagDirective::Copy => write!(f, "Copy"),
+            TagDirective::Replace => write!(f, "Replace"),
+        }
+    }
+}
+
+impl TryFrom<&str> for TagDirective {
+    type Error = ClientError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "Copy" => Ok(TagDirective::Copy),
+            "Replace" => Ok(TagDirective::Replace),
+            _ => Err(ClientError::Error(format!("Invalid MetadataDirective value: {}", value))),
+        }
+    }
+}
+
+impl TryFrom<String> for TagDirective {
+    type Error = ClientError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::try_from(value.as_str())
+    }
+}
+
+impl TryFrom<&String> for TagDirective {
+    type Error = ClientError;
+
+    fn try_from(value: &String) -> Result<Self, Self::Error> {
+        Self::try_from(value.as_str())
+    }
+}
+
+/// Build tags string
+pub(crate) fn build_tag_string(tags: &HashMap<String, String>) -> String {
+    tags.iter()
+        .map(|(k, v)| {
+            if v.is_empty() {
+                urlencoding::encode(k).to_string()
+            } else {
+                format!("{}={}", urlencoding::encode(k), urlencoding::encode(v))
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("&")
 }

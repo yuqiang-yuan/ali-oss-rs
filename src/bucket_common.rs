@@ -67,9 +67,7 @@ impl BucketSummary {
     }
 }
 
-///
 /// Bucket policy
-///
 #[derive(Debug, Clone, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
@@ -78,9 +76,7 @@ pub struct BucketPolicy {
     pub log_prefix: String,
 }
 
-///
 /// Bucket detail information
-///
 #[derive(Debug, Clone, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
@@ -219,7 +215,6 @@ impl BucketDetail {
 /// - `max_keys`
 /// - `is_truncated`
 /// - `next_marker`
-///
 #[derive(Debug, Clone, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
@@ -333,9 +328,7 @@ pub struct PutBucketOptions {
     pub tags: Option<Vec<(String, String)>>,
 }
 
-///
 /// Extract bucket location from XML response.
-///
 pub(crate) fn extract_bucket_location(xml: &str) -> ClientResult<String> {
     let mut reader = quick_xml::Reader::from_str(xml);
     let mut tag = "".to_string();
@@ -357,9 +350,7 @@ pub(crate) fn extract_bucket_location(xml: &str) -> ClientResult<String> {
     Ok(location)
 }
 
-///
 /// Bucket statistics data. All statistical items are counted in bytes
-///
 #[derive(Debug, Clone, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
@@ -432,9 +423,7 @@ impl BucketStat {
     }
 }
 
-///
 /// Object summary data for list objects v2
-///
 #[derive(Debug, Clone, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]

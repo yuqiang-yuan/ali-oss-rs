@@ -13,18 +13,44 @@ use crate::{
 
 #[async_trait]
 pub trait BucketOperations {
+    /// Create a new bucket
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putbucket>
     async fn put_bucket<S: AsRef<str> + Send>(&self, bucket_name: S, config: PutBucketConfiguration, options: Option<PutBucketOptions>) -> ClientResult<()>;
+
+    /// List buckets
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/listbuckets>
     async fn list_buckets(&self, options: Option<ListBucketsOptions>) -> ClientResult<ListBucketsResult>;
+
+    /// Get bucket information
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getbucketinfo>
     async fn get_bucket_info<S: AsRef<str> + Send>(&self, bucket_name: S) -> ClientResult<BucketDetail>;
+
+    /// Get bucket location
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getbucketlocation>
     async fn get_bucket_location<S: AsRef<str> + Send>(&self, bucket_name: S) -> ClientResult<String>;
+
+    /// Get bucket statistics data
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getbucketstat>
     async fn get_bucket_stat<S: AsRef<str> + Send>(&self, bucket_name: S) -> ClientResult<BucketStat>;
+
+    /// List objects in a bucket (V2)
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/listobjectsv2>
     async fn list_objects<S: AsRef<str> + Send>(&self, bucket_name: S, options: Option<ListObjectsOptions>) -> ClientResult<ListObjectsResult>;
+
+    /// Delete a bucket
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/deletebucket>
     async fn delete_bucket<S: AsRef<str> + Send>(&self, bucket_name: S) -> ClientResult<()>;
 }
 
 #[async_trait]
 impl BucketOperations for crate::Client {
-    ///
     /// Create a bucket.
     ///
     /// `bucket_name` constraint:
@@ -33,6 +59,7 @@ impl BucketOperations for crate::Client {
     /// - only lower case ascii, numbers and hyphen (`-`) are allowed
     /// - not starts or ends with hyphen character
     ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putbucket>
     async fn put_bucket<S: AsRef<str> + Send>(&self, bucket_name: S, config: PutBucketConfiguration, options: Option<PutBucketOptions>) -> ClientResult<()> {
         if !validate_bucket_name(bucket_name.as_ref()) {
             return Err(ClientError::Error(format!(
@@ -48,9 +75,7 @@ impl BucketOperations for crate::Client {
         Ok(())
     }
 
-    ///
-    /// See official document for more details: <https://help.aliyun.com/zh/oss/developer-reference/listbuckets?spm=a2c4g.11186623.help-menu-31815.d_5_1_1_3_0.4a08b930Bo8bEt>
-    ///
+    /// See official document for more details: <https://help.aliyun.com/zh/oss/developer-reference/listbuckets>
     async fn list_buckets(&self, options: Option<ListBucketsOptions>) -> ClientResult<ListBucketsResult> {
         let request_builder = build_list_buckets_request(&options);
 
@@ -59,9 +84,9 @@ impl BucketOperations for crate::Client {
         ListBucketsResult::from_xml(&content)
     }
 
-    ///
     /// Delte a bucket. Only non-empty bucket can be deleted
     ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/deletebucket>
     async fn delete_bucket<S: AsRef<str> + Send>(&self, bucket_name: S) -> ClientResult<()> {
         let request_builder = RequestBuilder::new().method(RequestMethod::Delete).bucket(bucket_name.as_ref());
 
@@ -70,9 +95,9 @@ impl BucketOperations for crate::Client {
         Ok(())
     }
 
-    ///
     /// Get bucket info
     ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getbucketinfo>
     async fn get_bucket_info<S: AsRef<str> + Send>(&self, bucket_name: S) -> ClientResult<BucketDetail> {
         let request_builder = RequestBuilder::new()
             .method(RequestMethod::Get)
@@ -84,9 +109,9 @@ impl BucketOperations for crate::Client {
         BucketDetail::from_xml(&content)
     }
 
-    ///
     /// Get bucket location
     ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getbucketlocation>
     async fn get_bucket_location<S: AsRef<str> + Send>(&self, bucket_name: S) -> ClientResult<String> {
         let request_builder = RequestBuilder::new()
             .method(RequestMethod::Get)
@@ -98,9 +123,9 @@ impl BucketOperations for crate::Client {
         extract_bucket_location(content.as_str())
     }
 
-    ///
     /// Get bucket statistics data
     ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getbucketstat>
     async fn get_bucket_stat<S: AsRef<str> + Send>(&self, bucket_name: S) -> ClientResult<BucketStat> {
         let request_builder = RequestBuilder::new()
             .method(RequestMethod::Get)
@@ -112,9 +137,9 @@ impl BucketOperations for crate::Client {
         BucketStat::from_xml(&content)
     }
 
+    /// List objects in a bucket (V2)
     ///
-    /// List objects in a bucket
-    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/listobjectsv2>
     async fn list_objects<S: AsRef<str> + Send>(&self, bucket_name: S, options: Option<ListObjectsOptions>) -> ClientResult<ListObjectsResult> {
         let request = build_list_objects_request(bucket_name.as_ref(), &options)?;
 

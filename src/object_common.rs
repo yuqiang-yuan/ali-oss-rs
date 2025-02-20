@@ -1,7 +1,7 @@
 use std::{collections::HashMap, path::Path};
 
 use crate::{
-    common::{Acl, ObjectType, ServerSideEncryptionAlgorithm, StorageClass},
+    common::{build_tag_string, Acl, MetadataDirective, ObjectType, ServerSideEncryptionAlgorithm, StorageClass, TagDirective},
     error::{ClientError, ClientResult},
     request::{RequestBuilder, RequestMethod},
     util::{validate_folder_object_key, validate_meta_key, validate_object_key, validate_tag_key, validate_tag_value},
@@ -587,20 +587,7 @@ pub(crate) fn build_put_object_request(
         }
 
         if !options.tags.is_empty() {
-            let s = options
-                .tags
-                .iter()
-                .map(|(k, v)| {
-                    if v.is_empty() {
-                        urlencoding::encode(k).to_string()
-                    } else {
-                        format!("{}={}", urlencoding::encode(k), urlencoding::encode(v))
-                    }
-                })
-                .collect::<Vec<_>>()
-                .join("&");
-
-            request = request.add_header("x-oss-tagging", &s);
+            request = request.add_header("x-oss-tagging", build_tag_string(&options.tags));
         }
     }
 
@@ -821,6 +808,283 @@ impl From<HashMap<String, String>> for ObjectMetadata {
             metadata: headers.drain().filter(|(k, _)| k.starts_with("x-oss-meta-")).collect(),
         }
     }
+}
+
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+pub struct CopyObjectOptions {
+    /// 指定 CopyObject 操作时是否覆盖同名目标 Object。
+    /// 当目标 Bucket 处于已开启或已暂停版本控制状态时，`x-oss-forbid-overwrite` 请求 Header 设置无效，即允许覆盖同名Object。
+    ///
+    /// - 未指定 `x-oss-forbid-overwrite` 或者指定 `x-oss-forbid-overwrite` 为 `false` 时，表示允许覆盖同名目标 Object。
+    /// - 指定 `x-oss-forbid-overwrite` 为 `true` 时，表示禁止覆盖同名 Object。
+    ///
+    /// 设置`x-oss-forbid-overwrite` 请求 Header 会导致 QPS 处理性能下降，
+    /// 如果您有大量的操作需要使用 `x-oss-forbid-overwrite` 请求 Header（QPS>1000），请联系技术支持，避免影响您的业务。
+    pub forbid_overwrite: Option<bool>,
+
+    /// 默认复制源 Object 的当前版本。如果需要复制指定的版本，请设置此参数
+    pub source_version_id: Option<String>,
+
+    /// 如果源 Object 的 ETag 值和您提供的 ETag 相等，则执行拷贝操作，并返回 200 OK。
+    pub copy_source_if_match: Option<String>,
+
+    /// 如果源 Object 的 ETag 值和您提供的 ETag 不相等，则执行拷贝操作，并返回 200 OK。
+    pub copy_source_if_none_match: Option<String>,
+
+    /// 如果指定的时间等于或者晚于文件实际修改时间，则正常拷贝文件，并返回 200 OK。
+    /// e.g. `Mon, 11 May 2020 08:16:23 GMT`
+    pub copy_source_if_unmodified_since: Option<String>,
+
+    /// 如果指定的时间早于文件实际修改时间，则正常拷贝文件，并返回200 OK。
+    /// e.g. `Mon, 11 May 2020 08:16:23 GMT`
+    pub copy_source_if_modified_since: Option<String>,
+
+    /// 指定如何设置目标 Object 的元数据。
+    pub metadata_directive: Option<MetadataDirective>,
+
+    /// Key 以 `x-oss-meta-` 开头
+    pub metadata: HashMap<String, String>,
+
+    pub server_side_encryption: Option<ServerSideEncryptionAlgorithm>,
+    pub server_side_encryption_key_id: Option<String>,
+
+    /// 指定 OSS 创建目标 Object 时的访问权限。
+    pub object_acl: Option<Acl>,
+
+    /// 指定 OSS 创建目标 Object 时的存储类型
+    pub storage_class: Option<StorageClass>,
+
+    pub tags: HashMap<String, String>,
+    pub tag_directive: Option<TagDirective>,
+}
+
+pub struct CopyObjectOptionsBuilder {
+    forbid_overwrite: Option<bool>,
+    source_version_id: Option<String>,
+    copy_source_if_match: Option<String>,
+    copy_source_if_none_match: Option<String>,
+    copy_source_if_unmodified_since: Option<String>,
+    copy_source_if_modified_since: Option<String>,
+    metadata_directive: Option<MetadataDirective>,
+    metadata: HashMap<String, String>,
+    server_side_encryption: Option<ServerSideEncryptionAlgorithm>,
+    server_side_encryption_key_id: Option<String>,
+    object_acl: Option<Acl>,
+    storage_class: Option<StorageClass>,
+    tags: HashMap<String, String>,
+    tag_directive: Option<TagDirective>,
+}
+
+impl CopyObjectOptionsBuilder {
+    pub fn new() -> Self {
+        Self {
+            forbid_overwrite: None,
+            source_version_id: None,
+            copy_source_if_match: None,
+            copy_source_if_none_match: None,
+            copy_source_if_unmodified_since: None,
+            copy_source_if_modified_since: None,
+            metadata_directive: None,
+            metadata: HashMap::new(),
+            server_side_encryption: None,
+            server_side_encryption_key_id: None,
+            object_acl: None,
+            storage_class: None,
+            tags: HashMap::new(),
+            tag_directive: None,
+        }
+    }
+
+    pub fn forbid_overwrite(mut self, forbid_overwrite: bool) -> Self {
+        self.forbid_overwrite = Some(forbid_overwrite);
+        self
+    }
+
+    pub fn source_version_id(mut self, version_id: impl Into<String>) -> Self {
+        self.source_version_id = Some(version_id.into());
+        self
+    }
+
+    pub fn copy_source_if_match(mut self, copy_source_if_match: impl Into<String>) -> Self {
+        self.copy_source_if_match = Some(copy_source_if_match.into());
+        self
+    }
+
+    pub fn copy_source_if_none_match(mut self, copy_source_if_none_match: impl Into<String>) -> Self {
+        self.copy_source_if_none_match = Some(copy_source_if_none_match.into());
+        self
+    }
+
+    pub fn copy_source_if_unmodified_since(mut self, copy_source_if_unmodified_since: impl Into<String>) -> Self {
+        self.copy_source_if_unmodified_since = Some(copy_source_if_unmodified_since.into());
+        self
+    }
+
+    pub fn copy_source_if_modified_since(mut self, copy_source_if_modified_since: impl Into<String>) -> Self {
+        self.copy_source_if_modified_since = Some(copy_source_if_modified_since.into());
+        self
+    }
+
+    pub fn metadata_directive(mut self, metadata_directive: MetadataDirective) -> Self {
+        self.metadata_directive = Some(metadata_directive);
+        self
+    }
+
+    pub fn metadata(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.metadata.insert(key.into(), value.into());
+        self
+    }
+
+    pub fn server_side_encryption(mut self, algorithm: ServerSideEncryptionAlgorithm) -> Self {
+        self.server_side_encryption = Some(algorithm);
+        self
+    }
+
+    pub fn server_side_encryption_key_id(mut self, key_id: impl Into<String>) -> Self {
+        self.server_side_encryption_key_id = Some(key_id.into());
+        self
+    }
+
+    pub fn object_acl(mut self, acl: Acl) -> Self {
+        self.object_acl = Some(acl);
+        self
+    }
+
+    pub fn storage_class(mut self, storage_class: StorageClass) -> Self {
+        self.storage_class = Some(storage_class);
+        self
+    }
+
+    pub fn tag(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.tags.insert(key.into(), value.into());
+        self
+    }
+
+    pub fn tag_directive(mut self, tag_directive: TagDirective) -> Self {
+        self.tag_directive = Some(tag_directive);
+        self
+    }
+
+    pub fn build(self) -> CopyObjectOptions {
+        CopyObjectOptions {
+            forbid_overwrite: self.forbid_overwrite,
+            source_version_id: self.source_version_id,
+            copy_source_if_match: self.copy_source_if_match,
+            copy_source_if_none_match: self.copy_source_if_none_match,
+            copy_source_if_unmodified_since: self.copy_source_if_unmodified_since,
+            copy_source_if_modified_since: self.copy_source_if_modified_since,
+            metadata_directive: self.metadata_directive,
+            metadata: self.metadata,
+            server_side_encryption: self.server_side_encryption,
+            server_side_encryption_key_id: self.server_side_encryption_key_id,
+            object_acl: self.object_acl,
+            storage_class: self.storage_class,
+            tags: self.tags,
+            tag_directive: self.tag_directive,
+        }
+    }
+}
+
+impl Default for CopyObjectOptionsBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+pub(crate) fn build_copy_object_request(
+    source_bucket_name: &str,
+    source_object_key: &str,
+    dest_bucket_name: &str,
+    dest_object_key: &str,
+    options: &Option<CopyObjectOptions>,
+) -> ClientResult<RequestBuilder> {
+    if !validate_object_key(dest_object_key) {
+        return Err(ClientError::Error(format!("invalid object key: {}", dest_object_key)));
+    }
+
+    let mut request = RequestBuilder::new()
+        .method(RequestMethod::Put)
+        .bucket(dest_bucket_name)
+        .object(dest_object_key)
+        .add_header(
+            "x-oss-copy-source",
+            format!("/{}/{}", urlencoding::encode(source_bucket_name), urlencoding::encode(source_object_key)),
+        );
+
+    if let Some(options) = options {
+        // validate metadata key and taggings
+        for (k, _) in options.metadata.iter() {
+            if !validate_meta_key(k) {
+                return Err(ClientError::Error(format!("invalid metadata key: {}", k)));
+            }
+        }
+
+        for (k, v) in options.tags.iter() {
+            if !validate_tag_key(k) || !validate_tag_value(v) {
+                return Err(ClientError::Error(format!("invalid tagging data: {}={}", k, v)));
+            }
+        }
+
+        if let Some(s) = &options.source_version_id {
+            request = request.add_query("versionId", s);
+        }
+
+        if let Some(b) = options.forbid_overwrite {
+            request = request.add_header("x-oss-forbid-overwrite", b.to_string())
+        }
+
+        if let Some(s) = &options.copy_source_if_match {
+            request = request.add_header("x-oss-copy-source-if-match", s);
+        }
+
+        if let Some(s) = &options.copy_source_if_none_match {
+            request = request.add_header("x-oss-copy-source-if-none-match", s);
+        }
+
+        if let Some(s) = &options.copy_source_if_modified_since {
+            request = request.add_header("x-oss-copy-source-if-modified-since", s);
+        }
+
+        if let Some(s) = &options.copy_source_if_unmodified_since {
+            request = request.add_header("x-oss-copy-source-if-unmodified-since", s);
+        }
+
+        if let Some(md) = options.metadata_directive {
+            request = request.add_header("x-oss-metadata-directive", md.to_string());
+        }
+
+        if let Some(a) = &options.server_side_encryption {
+            request = request.add_header("x-oss-server-side-encryption", a.to_string());
+        }
+
+        if let Some(s) = &options.server_side_encryption_key_id {
+            request = request.add_header("x-oss-server-side-encryption-key-id", s);
+        }
+
+        if let Some(acl) = options.object_acl {
+            request = request.add_header("x-oss-object-acl", acl.to_string());
+        }
+
+        if let Some(storage_class) = options.storage_class {
+            request = request.add_header("x-oss-storage-class", storage_class.to_string());
+        }
+
+        if let Some(td) = options.tag_directive {
+            request = request.add_header("x-oss-tag-directive", td.to_string());
+        }
+
+        if !options.tags.is_empty() {
+            request = request.add_header("x-oss-tagging", build_tag_string(&options.tags));
+        }
+
+        for (key, value) in options.metadata.iter() {
+            request = request.add_header(key, value);
+        }
+    }
+
+    Ok(request)
 }
 
 pub(crate) fn build_get_object_request(bucket_name: &str, object_key: &str, options: &Option<GetObjectOptions>) -> RequestBuilder {

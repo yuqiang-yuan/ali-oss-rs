@@ -3,7 +3,8 @@ use std::path::Path;
 use crate::{
     error::{ClientError, ClientResult},
     object_common::{
-        build_get_object_request, build_put_object_request, build_head_object_request, GetObjectMetadataOptions, GetObjectOptions, ObjectMetadata, PutObjectOptions, PutObjectResult, HeadObjectOptions
+        build_copy_object_request, build_get_object_request, build_head_object_request, build_put_object_request, CopyObjectOptions, GetObjectMetadataOptions,
+        GetObjectOptions, HeadObjectOptions, ObjectMetadata, PutObjectOptions, PutObjectResult,
     },
     request::{RequestBuilder, RequestMethod},
     util::validate_path,
@@ -12,43 +13,70 @@ use crate::{
 use super::{BytesBody, Client};
 
 pub trait ObjectOperations {
-    ///
     /// Uploads a file to a specified bucket and object key.
-    /// The file length must be greater than 0.
     ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
     fn upload_file<S1, S2, P>(&self, bucket_name: S1, object_key: S2, file_path: P, options: Option<PutObjectOptions>) -> ClientResult<PutObjectResult>
     where
         S1: AsRef<str>,
         S2: AsRef<str>,
         P: AsRef<Path>;
 
+    /// Uploads a file to a specified bucket and object key.
     ///
-    /// Download file to local file.
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getobject>
     fn download_file<S1, S2, P>(&self, bucket_name: S1, object_key: S2, file_path: P, options: Option<GetObjectOptions>) -> ClientResult<()>
     where
         S1: AsRef<str>,
         S2: AsRef<str>,
         P: AsRef<Path>;
 
-    ///
     /// Create a "folder"
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
     fn create_folder<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<PutObjectOptions>) -> ClientResult<PutObjectResult>
     where
         S1: AsRef<str>,
         S2: AsRef<str>;
 
+    /// Get object metadata
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getobjectmeta>
     fn get_object_metadata<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<GetObjectMetadataOptions>) -> ClientResult<ObjectMetadata>
     where
         S1: AsRef<str>,
         S2: AsRef<str>;
 
+    /// Head object
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/headobject>
     fn head_object<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<HeadObjectOptions>) -> ClientResult<ObjectMetadata>
     where
         S1: AsRef<str>,
         S2: AsRef<str>;
+
+    /// Copy files (Objects) between the same or different Buckets within the same region.
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/copyobject>
+    fn copy_object<S1, S2, S3, S4>(
+        &self,
+        source_bucket_name: S1,
+        source_object_key: S2,
+        dest_bucket_name: S3,
+        dest_object_key: S4,
+        options: Option<CopyObjectOptions>,
+    ) -> ClientResult<()>
+    where
+        S1: AsRef<str>,
+        S2: AsRef<str>,
+        S3: AsRef<str>,
+        S4: AsRef<str>;
 }
 
 impl ObjectOperations for Client {
+    /// Uploads a file to a specified bucket and object key.
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
     fn upload_file<S1, S2, P>(&self, bucket_name: S1, object_key: S2, file_path: P, options: Option<PutObjectOptions>) -> ClientResult<PutObjectResult>
     where
         S1: AsRef<str>,
@@ -70,8 +98,9 @@ impl ObjectOperations for Client {
         Ok(PutObjectResult::from_headers(&headers))
     }
 
+    /// Uploads a file to a specified bucket and object key.
     ///
-    /// Download file to local file.
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getobject>
     fn download_file<S1, S2, P>(&self, bucket_name: S1, object_key: S2, file_path: P, options: Option<GetObjectOptions>) -> ClientResult<()>
     where
         S1: AsRef<str>,
@@ -108,6 +137,9 @@ impl ObjectOperations for Client {
         Ok(())
     }
 
+    /// Create a "folder"
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
     fn create_folder<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<PutObjectOptions>) -> ClientResult<PutObjectResult>
     where
         S1: AsRef<str>,
@@ -129,6 +161,9 @@ impl ObjectOperations for Client {
         Ok(PutObjectResult::from_headers(&headers))
     }
 
+    /// Get object metadata
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getobjectmeta>
     fn get_object_metadata<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<GetObjectMetadataOptions>) -> ClientResult<ObjectMetadata>
     where
         S1: AsRef<str>,
@@ -153,7 +188,9 @@ impl ObjectOperations for Client {
         Ok(ObjectMetadata::from(headers))
     }
 
-    /// Get object metadata
+    /// Head object
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/headobject>
     fn head_object<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<HeadObjectOptions>) -> ClientResult<ObjectMetadata>
     where
         S1: AsRef<str>,
@@ -167,6 +204,36 @@ impl ObjectOperations for Client {
         let (headers, _) = self.do_request::<()>(request)?;
         Ok(ObjectMetadata::from(headers))
     }
+
+    /// Copy files (Objects) between the same or different Buckets within the same region.
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/copyobject>
+    fn copy_object<S1, S2, S3, S4>(
+        &self,
+        source_bucket_name: S1,
+        source_object_key: S2,
+        dest_bucket_name: S3,
+        dest_object_key: S4,
+        options: Option<CopyObjectOptions>,
+    ) -> ClientResult<()>
+    where
+        S1: AsRef<str>,
+        S2: AsRef<str>,
+        S3: AsRef<str>,
+        S4: AsRef<str>,
+    {
+        let request = build_copy_object_request(
+            source_bucket_name.as_ref(),
+            source_object_key.as_ref(),
+            dest_bucket_name.as_ref(),
+            dest_object_key.as_ref(),
+            &options,
+        )?;
+
+        let (_, _) = self.do_request::<()>(request)?;
+
+        Ok(())
+    }
 }
 
 #[cfg(all(test, feature = "blocking"))]
@@ -175,8 +242,8 @@ mod test_object_blocking {
 
     use crate::{
         blocking::{object::ObjectOperations, Client},
-        object_common::{GetObjectOptionsBuilder, PutObjectOptions, build_head_object_request},
-        common::{ObjectType, StorageClass}
+        common::{ObjectType, StorageClass},
+        object_common::{build_head_object_request, GetObjectOptionsBuilder, PutObjectOptions},
     };
 
     static INIT: Once = Once::new();
@@ -308,8 +375,7 @@ mod test_object_blocking {
         setup();
         let client = Client::from_env();
 
-        let result = client
-            .head_object("yuanyq", "rust-sdk-test/Oracle_VirtualBox_Extension_Pack-7.1.4.vbox-extpack", None);
+        let result = client.head_object("yuanyq", "rust-sdk-test/Oracle_VirtualBox_Extension_Pack-7.1.4.vbox-extpack", None);
 
         assert!(result.is_ok());
 
@@ -322,5 +388,49 @@ mod test_object_blocking {
         assert_eq!(Some(ObjectType::Normal), meta.object_type);
         assert_eq!(Some(StorageClass::Standard), meta.storage_class);
         assert!(!meta.metadata.is_empty());
+    }
+
+    /// Copy object in same bucket
+    #[test]
+    fn test_copy_object_1() {
+        setup();
+        let client = Client::from_env();
+
+        let source_bucket = "yuanyq";
+        let source_object = "test.php";
+
+        let dest_bucket = "yuanyq";
+        let dest_object = "test.php.bak";
+
+        let ret = client.copy_object(source_bucket, source_object, dest_bucket, dest_object, None);
+
+        assert!(ret.is_ok());
+
+        let source_meta = client.get_object_metadata(source_bucket, source_object, None).unwrap();
+        let dest_meta = client.get_object_metadata(dest_bucket, dest_object, None).unwrap();
+
+        assert_eq!(source_meta.etag, dest_meta.etag);
+    }
+
+    /// Copy object across buckets
+    #[test]
+    fn test_copy_object_2() {
+        setup();
+        let client = Client::from_env();
+
+        let source_bucket = "yuanyq";
+        let source_object = "test.php";
+
+        let dest_bucket = "yuanyq-2";
+        let dest_object = "test.php";
+
+        let ret = client.copy_object(source_bucket, source_object, dest_bucket, dest_object, None);
+
+        assert!(ret.is_ok());
+
+        let source_meta = client.get_object_metadata(source_bucket, source_object, None).unwrap();
+        let dest_meta = client.get_object_metadata(dest_bucket, dest_object, None).unwrap();
+
+        assert_eq!(source_meta.etag, dest_meta.etag);
     }
 }
