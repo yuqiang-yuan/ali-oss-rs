@@ -1,7 +1,10 @@
 use std::{collections::HashMap, path::Path};
 
+use base64::prelude::{Engine, BASE64_STANDARD};
+use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
+
 use crate::{
-    common::{build_tag_string, Acl, MetadataDirective, ObjectType, ServerSideEncryptionAlgorithm, StorageClass, TagDirective},
+    common::{self, build_tag_string, Acl, MetadataDirective, ObjectType, ServerSideEncryptionAlgorithm, StorageClass, TagDirective, MIME_TYPE_XML},
     error::{ClientError, ClientResult},
     request::{RequestBuilder, RequestMethod},
     util::{sanitize_etag, validate_meta_key, validate_object_key, validate_tag_key, validate_tag_value},
@@ -1260,4 +1263,190 @@ impl From<HashMap<String, String>> for AppendObjectResult {
             next_append_position: headers.remove("x-oss-next-append-position").unwrap_or("0".to_string()).parse().unwrap_or(0),
         }
     }
+}
+
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+pub struct DeleteMultipleObjectsItem {
+    pub key: String,
+    pub version_id: Option<String>,
+}
+
+/// Payload while call delete multiple objects in one request
+///
+/// Official document: <https://help.aliyun.com/zh/oss/developer-reference/deletemultipleobjects>
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+pub struct DeleteMultipleObjectsRequest {
+    pub quiet: Option<bool>,
+
+    /// Object keys to delete
+    pub objects: Vec<DeleteMultipleObjectsItem>,
+}
+
+impl DeleteMultipleObjectsRequest {
+    /// Consumes data and generate xml content
+    pub(crate) fn into_xml(self) -> ClientResult<String> {
+        let mut writer = quick_xml::Writer::new(Vec::new());
+        writer.write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), None)))?;
+
+        writer.write_event(Event::Start(BytesStart::new("Delete")))?;
+
+        if let Some(b) = self.quiet {
+            writer.write_event(Event::Start(BytesStart::new("Quiet")))?;
+            writer.write_event(Event::Text(BytesText::new(&b.to_string())))?;
+            writer.write_event(Event::End(BytesEnd::new("Quiet")))?;
+        }
+
+        for item in self.objects {
+            writer.write_event(Event::Start(BytesStart::new("Object")))?;
+
+            writer.write_event(Event::Start(BytesStart::new("Key")))?;
+            writer.write_event(Event::Text(BytesText::new(&item.key)))?;
+            writer.write_event(Event::End(BytesEnd::new("Key")))?;
+
+            if let Some(s) = item.version_id {
+                writer.write_event(Event::Start(BytesStart::new("VersionId")))?;
+                writer.write_event(Event::Text(BytesText::new(&s)))?;
+                writer.write_event(Event::End(BytesEnd::new("VersionId")))?;
+            }
+
+            writer.write_event(Event::End(BytesEnd::new("Object")))?;
+        }
+
+        writer.write_event(Event::End(BytesEnd::new("Delete")))?;
+
+        Ok(String::from_utf8(writer.into_inner())?)
+    }
+}
+
+impl<T> From<&[T]> for DeleteMultipleObjectsRequest
+where
+    T: AsRef<str>,
+{
+    fn from(object_keys: &[T]) -> Self {
+        Self {
+            objects: object_keys
+                .iter()
+                .map(|s| DeleteMultipleObjectsItem {
+                    key: s.as_ref().to_string(),
+                    ..Default::default()
+                })
+                .collect::<Vec<_>>(),
+            ..Default::default()
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum DeleteMultipleObjectsConfig<'a, T: AsRef<str> + 'a> {
+    /// A simpler mode: only keys to delete are specified
+    FromKeys(&'a [T]),
+
+    /// User custom full request
+    FullRequest(DeleteMultipleObjectsRequest),
+}
+
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+pub struct DeleteMultipleObjectsResultItem {
+    pub key: String,
+    pub version_id: Option<String>,
+    pub delete_marker: Option<String>,
+    pub delete_marker_version_id: Option<String>,
+}
+
+/// Result of deleting multiple objects ()
+///
+/// Official document: <https://help.aliyun.com/zh/oss/developer-reference/deletemultipleobjects>
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+pub struct DeleteMultipleObjectsResult {
+    pub items: Vec<DeleteMultipleObjectsResultItem>,
+}
+
+impl DeleteMultipleObjectsResult {
+    pub fn from_xml(xml_content: &str) -> ClientResult<Self> {
+        let mut reader = quick_xml::Reader::from_str(xml_content);
+        let mut tag = String::new();
+        let mut items = Vec::new();
+
+        let mut current_item = DeleteMultipleObjectsResultItem::default();
+
+        loop {
+            match reader.read_event()? {
+                Event::Eof => break,
+                Event::Start(t) => {
+                    tag = String::from_utf8_lossy(t.local_name().as_ref()).to_string();
+                    if tag == "Deleted" {
+                        current_item = DeleteMultipleObjectsResultItem::default();
+                    }
+                }
+
+                Event::Text(e) => {
+                    let s = e.unescape()?.to_string();
+                    match tag.as_str() {
+                        "Key" => current_item.key = s,
+                        "VersionId" => current_item.version_id = Some(s),
+                        "DeleteMarker" => current_item.delete_marker = Some(s),
+                        "DeleteMarkerVersionId" => current_item.delete_marker_version_id = Some(s),
+                        _ => {}
+                    }
+                }
+
+                Event::End(t) => {
+                    if t.local_name().as_ref() == b"Deleted" {
+                        items.push(current_item.clone());
+                    }
+                    tag.clear();
+                }
+
+                _ => {}
+            }
+        }
+
+        Ok(Self { items })
+    }
+}
+
+pub(crate) fn build_delete_multiple_objects_request<S>(bucket_name: &str, config: DeleteMultipleObjectsConfig<S>) -> ClientResult<RequestBuilder>
+where
+    S: AsRef<str>,
+{
+    let mut request = RequestBuilder::new()
+        .method(RequestMethod::Post)
+        .bucket(bucket_name)
+        .add_query("delete", "")
+        .content_type(MIME_TYPE_XML);
+
+    let items_len = match &config {
+        DeleteMultipleObjectsConfig::FromKeys(items) => items.len(),
+        DeleteMultipleObjectsConfig::FullRequest(cfg) => cfg.objects.len(),
+    };
+
+    if items_len > common::DELETE_MULTIPLE_OBJECTS_LIMIT {
+        return Err(ClientError::Error(format!(
+            "{} exceeds the items count limits while deleting multiple objects",
+            items_len
+        )));
+    }
+
+    let payload = match config {
+        DeleteMultipleObjectsConfig::FromKeys(items) => DeleteMultipleObjectsRequest::from(items),
+        DeleteMultipleObjectsConfig::FullRequest(delete_multiple_objects_request) => delete_multiple_objects_request,
+    };
+
+    let xml_content = payload.into_xml()?;
+    let content_md5 = BASE64_STANDARD.encode(*md5::compute(xml_content.as_bytes()));
+
+    request = request
+        .content_length(xml_content.len() as u64)
+        .add_header("content-md5", content_md5)
+        .text_body(xml_content);
+
+    Ok(request)
 }

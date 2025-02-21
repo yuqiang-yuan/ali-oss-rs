@@ -9,9 +9,10 @@ use tokio::io::AsyncWriteExt;
 use crate::{
     error::{ClientError, ClientResult},
     object_common::{
-        build_copy_object_request, build_get_object_request, build_head_object_request, build_put_object_request, AppendObjectOptions, AppendObjectResult,
-        CopyObjectOptions, CopyObjectResult, DeleteObjectOptions, DeleteObjectResult, GetObjectMetadataOptions, GetObjectOptions, GetObjectResult,
-        HeadObjectOptions, ObjectMetadata, PutObjectOptions, PutObjectResult,
+        build_copy_object_request, build_delete_multiple_objects_request, build_get_object_request, build_head_object_request, build_put_object_request,
+        AppendObjectOptions, AppendObjectResult, CopyObjectOptions, CopyObjectResult, DeleteMultipleObjectsConfig, DeleteMultipleObjectsResult,
+        DeleteObjectOptions, DeleteObjectResult, GetObjectMetadataOptions, GetObjectOptions, GetObjectResult, HeadObjectOptions, ObjectMetadata,
+        PutObjectOptions, PutObjectResult,
     },
     request::{RequestBuilder, RequestMethod},
     util::validate_path,
@@ -82,6 +83,40 @@ pub trait ObjectOperations {
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send,
         P: AsRef<Path> + Send;
+
+    /// Append object from buffer. suitable for small size content
+    /// And, it is recommended to set `mime_type` in `options`
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
+    async fn append_object_from_buffer<S1, S2, B>(
+        &self,
+        bucket_name: S1,
+        object_key: S2,
+        buffer: B,
+        position: u64,
+        options: Option<AppendObjectOptions>,
+    ) -> ClientResult<AppendObjectResult>
+    where
+        S1: AsRef<str> + Send,
+        S2: AsRef<str> + Send,
+        B: Into<Vec<u8>> + Send;
+
+    /// Append object from base64 string. suitable for small size content
+    /// And, it is recommended to set `mime_type` in `options`
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
+    async fn append_object_from_base64<S1, S2, S3>(
+        &self,
+        bucket_name: S1,
+        object_key: S2,
+        base64_string: S3,
+        position: u64,
+        options: Option<AppendObjectOptions>,
+    ) -> ClientResult<AppendObjectResult>
+    where
+        S1: AsRef<str> + Send,
+        S2: AsRef<str> + Send,
+        S3: AsRef<str> + Send;
 
     /// Download object to local file
     ///
@@ -154,6 +189,18 @@ pub trait ObjectOperations {
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send;
+
+    /// Delete multiple objects
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/deletemultipleobjects>
+    async fn delete_multiple_objects<'c, S1, S2>(
+        &self,
+        bucket_name: S1,
+        config: DeleteMultipleObjectsConfig<'c, S2>,
+    ) -> ClientResult<DeleteMultipleObjectsResult>
+    where
+        S1: AsRef<str> + Send,
+        S2: AsRef<str> + Send + Sync;
 }
 
 #[async_trait]
@@ -218,13 +265,7 @@ impl ObjectOperations for Client {
 
         let data = buffer.into();
 
-        let mut request = build_put_object_request(bucket_name, object_key, None, &options)?.bytes_body(data);
-
-        if let Some(options) = options {
-            if let Some(s) = &options.mime_type {
-                request = request.content_type(s);
-            }
-        }
+        let request = build_put_object_request(bucket_name, object_key, None, &options)?.bytes_body(data);
 
         let (headers, _) = self.do_request::<()>(request).await?;
 
@@ -291,6 +332,69 @@ impl ObjectOperations for Client {
         let (headers, _) = self.do_request::<()>(request).await?;
 
         Ok(headers.into())
+    }
+
+    /// Append object from buffer. suitable for small size content
+    /// And, it is recommended to set `mime_type` in `options`
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
+    async fn append_object_from_buffer<S1, S2, B>(
+        &self,
+        bucket_name: S1,
+        object_key: S2,
+        buffer: B,
+        position: u64,
+        options: Option<AppendObjectOptions>,
+    ) -> ClientResult<AppendObjectResult>
+    where
+        S1: AsRef<str> + Send,
+        S2: AsRef<str> + Send,
+        B: Into<Vec<u8>> + Send,
+    {
+        let bucket_name = bucket_name.as_ref();
+        let object_key = object_key.as_ref();
+
+        let object_key = object_key.strip_prefix("/").unwrap_or(object_key);
+        let object_key = object_key.strip_suffix("/").unwrap_or(object_key);
+
+        let mut request = build_put_object_request(bucket_name, object_key, None, &options)?;
+
+        // alter the request method and add append object query parameters
+        request = request
+            .method(RequestMethod::Post)
+            .add_query("append", "")
+            .add_query("position", position.to_string())
+            .bytes_body(buffer.into());
+
+        let (headers, _) = self.do_request::<()>(request).await?;
+
+        Ok(headers.into())
+    }
+
+    /// Append object from base64 string. suitable for small size content
+    /// And, it is recommended to set `mime_type` in `options`
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
+    async fn append_object_from_base64<S1, S2, S3>(
+        &self,
+        bucket_name: S1,
+        object_key: S2,
+        base64_string: S3,
+        position: u64,
+        options: Option<AppendObjectOptions>,
+    ) -> ClientResult<AppendObjectResult>
+    where
+        S1: AsRef<str> + Send,
+        S2: AsRef<str> + Send,
+        S3: AsRef<str> + Send,
+    {
+        let data = if let Ok(d) = BASE64_STANDARD.decode(base64_string.as_ref()) {
+            d
+        } else {
+            return Err(ClientError::Error("Decoding base64 string failed".to_string()));
+        };
+
+        self.append_object_from_buffer(bucket_name, object_key, data, position, options).await
     }
 
     /// Download oss object to local file.
@@ -485,9 +589,28 @@ impl ObjectOperations for Client {
 
         Ok(DeleteObjectResult)
     }
+
+    /// Delete multiple objects
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/deletemultipleobjects>
+    async fn delete_multiple_objects<'c, S1, S2>(
+        &self,
+        bucket_name: S1,
+        config: DeleteMultipleObjectsConfig<'c, S2>,
+    ) -> ClientResult<DeleteMultipleObjectsResult>
+    where
+        S1: AsRef<str> + Send,
+        S2: AsRef<str> + Send + Sync,
+    {
+        let request = build_delete_multiple_objects_request(bucket_name.as_ref(), config)?;
+
+        let (_, content) = self.do_request::<String>(request).await?;
+
+        DeleteMultipleObjectsResult::from_xml(&content)
+    }
 }
 
-#[cfg(all(test, not(feature = "blocking")))]
+#[cfg(test)]
 mod test_object_async {
     use std::{collections::HashMap, sync::Once};
 
@@ -496,7 +619,7 @@ mod test_object_async {
     use crate::{
         common::{ObjectType, StorageClass},
         object::ObjectOperations,
-        object_common::{GetObjectOptionsBuilder, PutObjectOptions, PutObjectOptionsBuilder},
+        object_common::{DeleteMultipleObjectsConfig, GetObjectOptionsBuilder, PutObjectOptions, PutObjectOptionsBuilder},
         Client,
     };
 
@@ -510,7 +633,7 @@ mod test_object_async {
     }
 
     #[tokio::test]
-    async fn test_upload_file_1() {
+    async fn test_upload_file_1_async() {
         setup();
 
         let client = Client::from_env();
@@ -531,7 +654,7 @@ mod test_object_async {
     }
 
     #[tokio::test]
-    async fn test_upload_file_2() {
+    async fn test_upload_file_2_async() {
         setup();
 
         let client = Client::from_env();
@@ -563,7 +686,7 @@ mod test_object_async {
 
     /// Test upload file with non-default storage class
     #[tokio::test]
-    async fn test_upload_file_3() {
+    async fn test_upload_file_3_async() {
         setup();
 
         let client = Client::from_env();
@@ -583,7 +706,7 @@ mod test_object_async {
     }
 
     #[tokio::test]
-    async fn test_create_folder_1() {
+    async fn test_create_folder_1_async() {
         setup();
 
         let client = Client::from_env();
@@ -598,7 +721,7 @@ mod test_object_async {
     /// Download full file content to local file
     /// with no options
     #[tokio::test]
-    async fn test_download_file_1() {
+    async fn test_download_file_1_async() {
         setup();
         let client = Client::from_env();
 
@@ -611,7 +734,7 @@ mod test_object_async {
 
     /// Download range of file
     #[tokio::test]
-    async fn test_download_file_2() {
+    async fn test_download_file_2_async() {
         setup();
         let client = Client::from_env();
 
@@ -630,7 +753,7 @@ mod test_object_async {
 
     /// Test invalid output file name
     #[tokio::test]
-    async fn test_download_file_3() {
+    async fn test_download_file_3_async() {
         setup();
         let client = Client::from_env();
 
@@ -652,7 +775,7 @@ mod test_object_async {
     }
 
     #[tokio::test]
-    async fn test_get_object_metadata() {
+    async fn test_get_object_metadata_async() {
         setup();
         let client = Client::from_env();
 
@@ -671,7 +794,7 @@ mod test_object_async {
     }
 
     #[tokio::test]
-    async fn test_head_object() {
+    async fn test_head_object_async() {
         setup();
         let client = Client::from_env();
 
@@ -693,7 +816,7 @@ mod test_object_async {
 
     /// Copy object in same bucket
     #[tokio::test]
-    async fn test_copy_object_1() {
+    async fn test_copy_object_1_async() {
         setup();
         let client = Client::from_env();
 
@@ -715,7 +838,7 @@ mod test_object_async {
 
     /// Copy object across buckets
     #[tokio::test]
-    async fn test_copy_object_2() {
+    async fn test_copy_object_2_async() {
         setup();
         let client = Client::from_env();
 
@@ -736,7 +859,7 @@ mod test_object_async {
     }
 
     #[tokio::test]
-    async fn test_create_object_from_buffer() {
+    async fn test_create_object_from_buffer_async() {
         setup();
         let client = Client::from_env();
 
@@ -760,7 +883,7 @@ mod test_object_async {
     }
 
     #[tokio::test]
-    async fn test_create_object_from_base64() {
+    async fn test_create_object_from_base64_async() {
         setup();
         let client = Client::from_env();
 
@@ -782,7 +905,7 @@ mod test_object_async {
     }
 
     #[tokio::test]
-    async fn test_delete_object() {
+    async fn test_delete_object_async() {
         setup();
         let client = Client::from_env();
 
@@ -794,7 +917,7 @@ mod test_object_async {
     }
 
     #[tokio::test]
-    async fn test_exists() {
+    async fn test_exists_async() {
         setup();
         let client = Client::from_env();
 
@@ -812,7 +935,7 @@ mod test_object_async {
     }
 
     #[tokio::test]
-    async fn test_append_object() {
+    async fn test_append_object_1_async() {
         setup();
         let client = Client::from_env();
 
@@ -841,5 +964,106 @@ mod test_object_async {
 
         let meta = client.head_object(bucket, object, None).await;
         log::debug!("{:#?}", meta.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_append_object_from_buffer_async() {
+        setup();
+        let client = Client::from_env();
+
+        let bucket = "yuanyq";
+        let object = "rust-sdk-test/img-appended-from-buffer.jpg";
+
+        let file1 = "/home/yuanyq/Pictures/test-image-part-1.data";
+        let file2 = "/home/yuanyq/Pictures/test-image-part-2.data";
+        let file3 = "/home/yuanyq/Pictures/test-image-part-3.data";
+
+        let buffer1 = std::fs::read(file1).unwrap();
+        let buffer2 = std::fs::read(file2).unwrap();
+        let buffer3 = std::fs::read(file3).unwrap();
+
+        let ret1 = client.append_object_from_buffer(bucket, object, buffer1, 0, None).await;
+        assert!(ret1.is_ok());
+
+        let next_pos = ret1.unwrap().next_append_position;
+        assert_eq!(61929, next_pos);
+
+        let ret2 = client.append_object_from_buffer(bucket, object, buffer2, next_pos, None).await;
+        assert!(ret2.is_ok());
+
+        let next_pos = ret2.unwrap().next_append_position;
+        assert_eq!(61929 * 2, next_pos);
+
+        let ret3 = client.append_object_from_buffer(bucket, object, buffer3, next_pos, None).await;
+        assert!(ret3.is_ok());
+
+        let meta = client.head_object(bucket, object, None).await;
+        log::debug!("{:#?}", meta.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_append_object_from_base64_async() {
+        setup();
+        let client = Client::from_env();
+
+        let bucket = "yuanyq";
+        let object = "rust-sdk-test/img-appended-from-base64.jpg";
+
+        let file1 = "/home/yuanyq/Pictures/test-image-part-1.data";
+        let file2 = "/home/yuanyq/Pictures/test-image-part-2.data";
+        let file3 = "/home/yuanyq/Pictures/test-image-part-3.data";
+
+        let buffer1 = std::fs::read(file1).unwrap();
+        let buffer2 = std::fs::read(file2).unwrap();
+        let buffer3 = std::fs::read(file3).unwrap();
+
+        let s1 = BASE64_STANDARD.encode(buffer1);
+        let s2 = BASE64_STANDARD.encode(buffer2);
+        let s3 = BASE64_STANDARD.encode(buffer3);
+
+        let ret1 = client.append_object_from_base64(bucket, object, s1, 0, None).await;
+        assert!(ret1.is_ok());
+
+        let next_pos = ret1.unwrap().next_append_position;
+        assert_eq!(61929, next_pos);
+
+        let ret2 = client.append_object_from_base64(bucket, object, s2, next_pos, None).await;
+        assert!(ret2.is_ok());
+
+        let next_pos = ret2.unwrap().next_append_position;
+        assert_eq!(61929 * 2, next_pos);
+
+        let ret3 = client.append_object_from_base64(bucket, object, s3, next_pos, None).await;
+        assert!(ret3.is_ok());
+
+        let meta = client.head_object(bucket, object, None).await;
+        log::debug!("{:#?}", meta.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_delete_multiple_objects_async() {
+        setup();
+        let client = Client::from_env();
+
+        let keys = [
+            "rust-sdk-test/01-01.jpg",
+            "rust-sdk-test/01-02.jpg",
+            "rust-sdk-test/01-03.png",
+            "rust-sdk-test/01-04.jpg",
+            "rust-sdk-test/01-05.png",
+        ];
+
+        let response = client.delete_multiple_objects("yuanyq", DeleteMultipleObjectsConfig::FromKeys(&keys)).await;
+
+        log::debug!("{:#?}", response);
+
+        assert!(response.is_ok());
+
+        let result = response.unwrap();
+        assert_eq!(5, result.items.len());
+
+        for s in keys {
+            assert!(result.items.iter().any(|item| item.key == s));
+        }
     }
 }

@@ -113,7 +113,7 @@ mod test_bucket_blocking {
     }
 
     #[test]
-    fn test_list_buckets() {
+    fn test_list_buckets_blocking() {
         setup();
 
         let client = Client::from_env();
@@ -124,7 +124,7 @@ mod test_bucket_blocking {
     }
 
     #[test]
-    fn test_list_objects_1() {
+    fn test_list_objects_1_blocking() {
         setup();
 
         let client = Client::from_env();
@@ -137,7 +137,7 @@ mod test_bucket_blocking {
     }
 
     #[test]
-    fn test_list_objects_2() {
+    fn test_list_objects_2_blocking() {
         setup();
 
         let client = Client::from_env();

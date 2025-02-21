@@ -6,9 +6,10 @@ use reqwest::StatusCode;
 use crate::{
     error::{ClientError, ClientResult},
     object_common::{
-        build_copy_object_request, build_get_object_request, build_head_object_request, build_put_object_request, AppendObjectOptions, AppendObjectResult,
-        CopyObjectOptions, CopyObjectResult, DeleteObjectOptions, DeleteObjectResult, GetObjectMetadataOptions, GetObjectOptions, GetObjectResult,
-        HeadObjectOptions, ObjectMetadata, PutObjectOptions, PutObjectResult,
+        build_copy_object_request, build_delete_multiple_objects_request, build_get_object_request, build_head_object_request, build_put_object_request,
+        AppendObjectOptions, AppendObjectResult, CopyObjectOptions, CopyObjectResult, DeleteMultipleObjectsConfig, DeleteMultipleObjectsResult,
+        DeleteObjectOptions, DeleteObjectResult, GetObjectMetadataOptions, GetObjectOptions, GetObjectResult, HeadObjectOptions, ObjectMetadata,
+        PutObjectOptions, PutObjectResult,
     },
     request::{RequestBuilder, RequestMethod},
     util::validate_path,
@@ -74,6 +75,40 @@ pub trait ObjectOperations {
         S2: AsRef<str>,
         P: AsRef<Path>;
 
+    /// Append object from buffer. suitable for small size content
+    /// And, it is recommended to set `mime_type` in `options`
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
+    fn append_object_from_buffer<S1, S2, B>(
+        &self,
+        bucket_name: S1,
+        object_key: S2,
+        buffer: B,
+        position: u64,
+        options: Option<AppendObjectOptions>,
+    ) -> ClientResult<AppendObjectResult>
+    where
+        S1: AsRef<str>,
+        S2: AsRef<str>,
+        B: Into<Vec<u8>>;
+
+    /// Append object from base64 string. suitable for small size content
+    /// And, it is recommended to set `mime_type` in `options`
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
+    fn append_object_from_base64<S1, S2, S3>(
+        &self,
+        bucket_name: S1,
+        object_key: S2,
+        base64_string: S3,
+        position: u64,
+        options: Option<AppendObjectOptions>,
+    ) -> ClientResult<AppendObjectResult>
+    where
+        S1: AsRef<str>,
+        S2: AsRef<str>,
+        S3: AsRef<str>;
+
     /// Uploads a file to a specified bucket and object key.
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getobject>
@@ -136,6 +171,14 @@ pub trait ObjectOperations {
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/deleteobject>
     fn delete_object<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<DeleteObjectOptions>) -> ClientResult<DeleteObjectResult>
+    where
+        S1: AsRef<str>,
+        S2: AsRef<str>;
+
+    /// Delete multiple objects
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/deletemultipleobjects>
+    fn delete_multiple_objects<S1, S2>(&self, bucket_name: S1, config: DeleteMultipleObjectsConfig<'_, S2>) -> ClientResult<DeleteMultipleObjectsResult>
     where
         S1: AsRef<str>,
         S2: AsRef<str>;
@@ -257,6 +300,69 @@ impl ObjectOperations for Client {
         let (headers, _) = self.do_request::<()>(request)?;
 
         Ok(headers.into())
+    }
+
+    /// Append object from buffer. suitable for small size content
+    /// And, it is recommended to set `mime_type` in `options`
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
+    fn append_object_from_buffer<S1, S2, B>(
+        &self,
+        bucket_name: S1,
+        object_key: S2,
+        buffer: B,
+        position: u64,
+        options: Option<AppendObjectOptions>,
+    ) -> ClientResult<AppendObjectResult>
+    where
+        S1: AsRef<str>,
+        S2: AsRef<str>,
+        B: Into<Vec<u8>>,
+    {
+        let bucket_name = bucket_name.as_ref();
+        let object_key = object_key.as_ref();
+
+        let object_key = object_key.strip_prefix("/").unwrap_or(object_key);
+        let object_key = object_key.strip_suffix("/").unwrap_or(object_key);
+
+        let mut request = build_put_object_request(bucket_name, object_key, None, &options)?;
+
+        // alter the request method and add append object query parameters
+        request = request
+            .method(RequestMethod::Post)
+            .add_query("append", "")
+            .add_query("position", position.to_string())
+            .bytes_body(buffer.into());
+
+        let (headers, _) = self.do_request::<()>(request)?;
+
+        Ok(headers.into())
+    }
+
+    /// Append object from base64 string. suitable for small size content
+    /// And, it is recommended to set `mime_type` in `options`
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
+    fn append_object_from_base64<S1, S2, S3>(
+        &self,
+        bucket_name: S1,
+        object_key: S2,
+        base64_string: S3,
+        position: u64,
+        options: Option<AppendObjectOptions>,
+    ) -> ClientResult<AppendObjectResult>
+    where
+        S1: AsRef<str>,
+        S2: AsRef<str>,
+        S3: AsRef<str>,
+    {
+        let data = if let Ok(d) = BASE64_STANDARD.decode(base64_string.as_ref()) {
+            d
+        } else {
+            return Err(ClientError::Error("Decoding base64 string failed".to_string()));
+        };
+
+        self.append_object_from_buffer(bucket_name, object_key, data, position, options)
     }
 
     /// Uploads a file to a specified bucket and object key.
@@ -436,6 +542,21 @@ impl ObjectOperations for Client {
 
         Ok(DeleteObjectResult)
     }
+
+    /// Delete multiple objects
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/deletemultipleobjects>
+    fn delete_multiple_objects<S1, S2>(&self, bucket_name: S1, config: DeleteMultipleObjectsConfig<'_, S2>) -> ClientResult<DeleteMultipleObjectsResult>
+    where
+        S1: AsRef<str>,
+        S2: AsRef<str>,
+    {
+        let request = build_delete_multiple_objects_request(bucket_name.as_ref(), config)?;
+
+        let (_, content) = self.do_request::<String>(request)?;
+
+        DeleteMultipleObjectsResult::from_xml(&content)
+    }
 }
 
 #[cfg(all(test, feature = "blocking"))]
@@ -447,7 +568,7 @@ mod test_object_blocking {
     use crate::{
         blocking::{object::ObjectOperations, Client},
         common::{ObjectType, StorageClass},
-        object_common::{GetObjectOptionsBuilder, PutObjectOptions, PutObjectOptionsBuilder},
+        object_common::{DeleteMultipleObjectsConfig, GetObjectOptionsBuilder, PutObjectOptions, PutObjectOptionsBuilder},
     };
 
     static INIT: Once = Once::new();
@@ -460,7 +581,7 @@ mod test_object_blocking {
     }
 
     #[test]
-    fn test_upload_file_1() {
+    fn test_upload_file_1_blocking() {
         setup();
 
         let client = Client::from_env();
@@ -474,7 +595,7 @@ mod test_object_blocking {
     }
 
     #[test]
-    fn test_upload_file_2() {
+    fn test_upload_file_2_blocking() {
         setup();
 
         let client = Client::from_env();
@@ -503,7 +624,7 @@ mod test_object_blocking {
     }
 
     #[test]
-    fn test_create_folder_1() {
+    fn test_create_folder_1_blocking() {
         setup();
 
         let client = Client::from_env();
@@ -517,7 +638,7 @@ mod test_object_blocking {
 
     /// Test download file with invalid options
     #[test]
-    fn test_download_file_1() {
+    fn test_download_file_1_blocking() {
         setup();
 
         let client = Client::from_env();
@@ -537,7 +658,7 @@ mod test_object_blocking {
     }
 
     #[test]
-    fn test_download_file_2() {
+    fn test_download_file_2_blocking() {
         setup();
 
         let client = Client::from_env();
@@ -558,7 +679,7 @@ mod test_object_blocking {
     }
 
     #[test]
-    fn test_get_object_metadata() {
+    fn test_get_object_metadata_blocking() {
         setup();
         let client = Client::from_env();
 
@@ -575,7 +696,7 @@ mod test_object_blocking {
     }
 
     #[test]
-    fn test_head_object() {
+    fn test_head_object_blocking() {
         setup();
         let client = Client::from_env();
 
@@ -596,7 +717,7 @@ mod test_object_blocking {
 
     /// Copy object in same bucket
     #[test]
-    fn test_copy_object_1() {
+    fn test_copy_object_1_blocking() {
         setup();
         let client = Client::from_env();
 
@@ -618,7 +739,7 @@ mod test_object_blocking {
 
     /// Copy object across buckets
     #[test]
-    fn test_copy_object_2() {
+    fn test_copy_object_2_blocking() {
         setup();
         let client = Client::from_env();
 
@@ -639,7 +760,7 @@ mod test_object_blocking {
     }
 
     #[test]
-    fn test_create_object_from_buffer() {
+    fn test_create_object_from_buffer_blocking() {
         setup();
         let client = Client::from_env();
 
@@ -663,7 +784,7 @@ mod test_object_blocking {
     }
 
     #[test]
-    fn test_create_object_from_base64() {
+    fn test_create_object_from_base64_blocking() {
         setup();
         let client = Client::from_env();
 
@@ -685,7 +806,7 @@ mod test_object_blocking {
     }
 
     #[test]
-    fn test_delete_object() {
+    fn test_delete_object_blocking() {
         setup();
         let client = Client::from_env();
 
@@ -697,7 +818,34 @@ mod test_object_blocking {
     }
 
     #[test]
-    fn test_exists() {
+    fn test_delete_multiple_objects_blocking() {
+        setup();
+        let client = Client::from_env();
+
+        let keys = [
+            "rust-sdk-test/01-01.jpg",
+            "rust-sdk-test/01-02.jpg",
+            "rust-sdk-test/01-03.png",
+            "rust-sdk-test/01-04.jpg",
+            "rust-sdk-test/01-05.png",
+        ];
+
+        let response = client.delete_multiple_objects("yuanyq", DeleteMultipleObjectsConfig::FromKeys(&keys));
+
+        log::debug!("{:#?}", response);
+
+        assert!(response.is_ok());
+
+        let result = response.unwrap();
+        assert_eq!(5, result.items.len());
+
+        for s in keys {
+            assert!(result.items.iter().any(|item| item.key == s));
+        }
+    }
+
+    #[test]
+    fn test_exists_blocking() {
         setup();
         let client = Client::from_env();
 
@@ -715,7 +863,7 @@ mod test_object_blocking {
     }
 
     #[test]
-    fn test_append_object() {
+    fn test_append_object_blocking() {
         setup();
         let client = Client::from_env();
 
@@ -745,4 +893,105 @@ mod test_object_blocking {
         let meta = client.head_object(bucket, object, None);
         log::debug!("{:#?}", meta.unwrap());
     }
+
+    #[test]
+    fn test_append_object_from_buffer_blocking() {
+        setup();
+        let client = Client::from_env();
+
+        let bucket = "yuanyq";
+        let object = "rust-sdk-test/img-appended-from-buffer-blocking.jpg";
+
+        let file1 = "/home/yuanyq/Pictures/test-image-part-1.data";
+        let file2 = "/home/yuanyq/Pictures/test-image-part-2.data";
+        let file3 = "/home/yuanyq/Pictures/test-image-part-3.data";
+
+        let buffer1 = std::fs::read(file1).unwrap();
+        let buffer2 = std::fs::read(file2).unwrap();
+        let buffer3 = std::fs::read(file3).unwrap();
+
+        let ret1 = client.append_object_from_buffer(bucket, object, buffer1, 0, None);
+        assert!(ret1.is_ok());
+
+        let next_pos = ret1.unwrap().next_append_position;
+        assert_eq!(61929, next_pos);
+
+        let ret2 = client.append_object_from_buffer(bucket, object, buffer2, next_pos, None);
+        assert!(ret2.is_ok());
+
+        let next_pos = ret2.unwrap().next_append_position;
+        assert_eq!(61929 * 2, next_pos);
+
+        let ret3 = client.append_object_from_buffer(bucket, object, buffer3, next_pos, None);
+        assert!(ret3.is_ok());
+
+        let meta = client.head_object(bucket, object, None);
+        log::debug!("{:#?}", meta.unwrap());
+    }
+
+    #[test]
+    fn test_append_object_from_base64_blocking() {
+        setup();
+        let client = Client::from_env();
+
+        let bucket = "yuanyq";
+        let object = "rust-sdk-test/img-appended-from-base64-blocking.jpg";
+
+        let file1 = "/home/yuanyq/Pictures/test-image-part-1.data";
+        let file2 = "/home/yuanyq/Pictures/test-image-part-2.data";
+        let file3 = "/home/yuanyq/Pictures/test-image-part-3.data";
+
+        let buffer1 = std::fs::read(file1).unwrap();
+        let buffer2 = std::fs::read(file2).unwrap();
+        let buffer3 = std::fs::read(file3).unwrap();
+
+        let s1 = BASE64_STANDARD.encode(buffer1);
+        let s2 = BASE64_STANDARD.encode(buffer2);
+        let s3 = BASE64_STANDARD.encode(buffer3);
+
+        let ret1 = client.append_object_from_base64(bucket, object, s1, 0, None);
+        assert!(ret1.is_ok());
+
+        let next_pos = ret1.unwrap().next_append_position;
+        assert_eq!(61929, next_pos);
+
+        let ret2 = client.append_object_from_base64(bucket, object, s2, next_pos, None);
+        assert!(ret2.is_ok());
+
+        let next_pos = ret2.unwrap().next_append_position;
+        assert_eq!(61929 * 2, next_pos);
+
+        let ret3 = client.append_object_from_base64(bucket, object, s3, next_pos, None);
+        assert!(ret3.is_ok());
+
+        let meta = client.head_object(bucket, object, None);
+        log::debug!("{:#?}", meta.unwrap());
+    }
+
+    // #[test]
+    // fn test_delete_multiple_objects_async() {
+    //     setup();
+    //     let client = Client::from_env();
+
+    //     let keys = [
+    //         "rust-sdk-test/01-01.jpg",
+    //         "rust-sdk-test/01-02.jpg",
+    //         "rust-sdk-test/01-03.png",
+    //         "rust-sdk-test/01-04.jpg",
+    //         "rust-sdk-test/01-05.png"
+    //     ];
+
+    //     let response = client.delete_multiple_objects("yuanyq", DeleteMultipleObjectsConfig::FromKeys(&keys));
+
+    //     log::debug!("{:#?}", response);
+
+    //     assert!(response.is_ok());
+
+    //     let result = response.unwrap();
+    //     assert_eq!(5, result.items.len());
+
+    //     for s in keys {
+    //         assert!(result.items.iter().any(|item| item.key == s));
+    //     }
+    // }
 }

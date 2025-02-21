@@ -149,7 +149,7 @@ impl BucketOperations for crate::Client {
     }
 }
 
-#[cfg(all(test, not(feature = "blocking")))]
+#[cfg(test)]
 pub mod test_bucket_async {
     use std::sync::Once;
 
@@ -165,7 +165,7 @@ pub mod test_bucket_async {
     }
 
     #[tokio::test]
-    async fn test_list_buckets() {
+    async fn test_list_buckets_async() {
         setup();
         let client = crate::Client::from_env();
 

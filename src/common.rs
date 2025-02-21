@@ -5,6 +5,9 @@ use quick_xml::events::Event;
 
 use crate::error::{ClientError, ClientResult};
 
+pub const MIME_TYPE_XML: &str = "application/xml";
+pub const DELETE_MULTIPLE_OBJECTS_LIMIT: usize = 1000;
+
 #[derive(Debug, Clone, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]

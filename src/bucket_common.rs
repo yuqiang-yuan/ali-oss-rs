@@ -2,7 +2,7 @@ use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 
 use crate::{
     common::{
-        AccessMonitor, Acl, CrossRegionReplication, DataRedundancyType, ObjectType, Owner, ServerSideEncryptionAlgorithm, ServerSideEncryptionRule,
+        self, AccessMonitor, Acl, CrossRegionReplication, DataRedundancyType, ObjectType, Owner, ServerSideEncryptionAlgorithm, ServerSideEncryptionRule,
         StorageClass, TransferAcceleration, Versioning,
     },
     error::{ClientError, ClientResult},
@@ -637,7 +637,7 @@ pub(crate) fn build_put_bucket_request(bucket_name: &str, config: &PutBucketConf
     let mut request = crate::request::RequestBuilder::new()
         .method(RequestMethod::Put)
         .bucket(bucket_name)
-        .content_type("application/xml")
+        .content_type(common::MIME_TYPE_XML)
         .text_body(xml);
 
     if let Some(options) = options {
