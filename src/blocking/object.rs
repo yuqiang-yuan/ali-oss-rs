@@ -7,9 +7,9 @@ use crate::{
     error::{Error, Result},
     object_common::{
         build_copy_object_request, build_delete_multiple_objects_request, build_get_object_request, build_head_object_request, build_put_object_request,
-        AppendObjectOptions, AppendObjectResult, CopyObjectOptions, CopyObjectResult, DeleteMultipleObjectsConfig, DeleteMultipleObjectsResult,
-        DeleteObjectOptions, DeleteObjectResult, GetObjectMetadataOptions, GetObjectOptions, GetObjectResult, HeadObjectOptions, ObjectMetadata,
-        PutObjectOptions, PutObjectResult,
+        build_restore_object_request, AppendObjectOptions, AppendObjectResult, CopyObjectOptions, CopyObjectResult, DeleteMultipleObjectsConfig,
+        DeleteMultipleObjectsResult, DeleteObjectOptions, DeleteObjectResult, GetObjectMetadataOptions, GetObjectOptions, GetObjectResult, HeadObjectOptions,
+        ObjectMetadata, PutObjectOptions, PutObjectResult, RestoreObjectRequest, RestoreObjectResult,
     },
     request::{RequestBuilder, RequestMethod},
     util::validate_path,
@@ -22,13 +22,7 @@ pub trait ObjectOperations {
     /// Uploads a file to a specified bucket and object key.
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
-    fn put_object_from_file<S1, S2, P>(
-        &self,
-        bucket_name: S1,
-        object_key: S2,
-        file_path: P,
-        options: Option<PutObjectOptions>,
-    ) -> Result<PutObjectResult>
+    fn put_object_from_file<S1, S2, P>(&self, bucket_name: S1, object_key: S2, file_path: P, options: Option<PutObjectOptions>) -> Result<PutObjectResult>
     where
         S1: AsRef<str>,
         S2: AsRef<str>,
@@ -180,6 +174,22 @@ pub trait ObjectOperations {
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/deletemultipleobjects>
     fn delete_multiple_objects<S1, S2>(&self, bucket_name: S1, config: DeleteMultipleObjectsConfig<'_, S2>) -> Result<DeleteMultipleObjectsResult>
+    where
+        S1: AsRef<str>,
+        S2: AsRef<str>;
+
+    /// Restore object
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/restoreobject>
+    fn restore_object<S1, S2>(&self, bucket_name: S1, object_key: S2, config: RestoreObjectRequest) -> Result<RestoreObjectResult>
+    where
+        S1: AsRef<str>,
+        S2: AsRef<str>;
+
+    /// Clean retored object
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/cleanrestoredobject>
+    fn clean_restored_object<S1, S2>(&self, bucket_name: S1, object_key: S2) -> Result<()>
     where
         S1: AsRef<str>,
         S2: AsRef<str>;
@@ -560,6 +570,38 @@ impl ObjectOperations for Client {
         let (_, content) = self.do_request::<String>(request)?;
 
         DeleteMultipleObjectsResult::from_xml(&content)
+    }
+
+    /// Restore object
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/restoreobject>
+    fn restore_object<S1, S2>(&self, bucket_name: S1, object_key: S2, config: RestoreObjectRequest) -> Result<RestoreObjectResult>
+    where
+        S1: AsRef<str>,
+        S2: AsRef<str>,
+    {
+        let request = build_restore_object_request(bucket_name.as_ref(), object_key.as_ref(), config)?;
+        let (headers, _) = self.do_request::<()>(request)?;
+        Ok(headers.into())
+    }
+
+    /// Clean retored object
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/cleanrestoredobject>
+    fn clean_restored_object<S1, S2>(&self, bucket_name: S1, object_key: S2) -> Result<()>
+    where
+        S1: AsRef<str>,
+        S2: AsRef<str>,
+    {
+        let request = RequestBuilder::new()
+            .method(RequestMethod::Post)
+            .bucket(bucket_name.as_ref())
+            .object(object_key.as_ref())
+            .add_query("cleanRestoredObject", "");
+
+        let _ = self.do_request::<()>(request)?;
+
+        Ok(())
     }
 }
 

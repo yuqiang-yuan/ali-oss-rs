@@ -16,7 +16,7 @@ use std::{collections::HashMap, pin::Pin, str::FromStr};
 
 use async_trait::async_trait;
 use bytes::Bytes;
-use error::{Error, Result, ErrorResponse};
+use error::{Error, ErrorResponse, Result};
 use futures::Stream;
 use request::RequestBody;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};

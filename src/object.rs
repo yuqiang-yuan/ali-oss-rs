@@ -10,9 +10,9 @@ use crate::{
     error::{Error, Result},
     object_common::{
         build_copy_object_request, build_delete_multiple_objects_request, build_get_object_request, build_head_object_request, build_put_object_request,
-        AppendObjectOptions, AppendObjectResult, CopyObjectOptions, CopyObjectResult, DeleteMultipleObjectsConfig, DeleteMultipleObjectsResult,
-        DeleteObjectOptions, DeleteObjectResult, GetObjectMetadataOptions, GetObjectOptions, GetObjectResult, HeadObjectOptions, ObjectMetadata,
-        PutObjectOptions, PutObjectResult,
+        build_restore_object_request, AppendObjectOptions, AppendObjectResult, CopyObjectOptions, CopyObjectResult, DeleteMultipleObjectsConfig,
+        DeleteMultipleObjectsResult, DeleteObjectOptions, DeleteObjectResult, GetObjectMetadataOptions, GetObjectOptions, GetObjectResult, HeadObjectOptions,
+        ObjectMetadata, PutObjectOptions, PutObjectResult, RestoreObjectRequest, RestoreObjectResult,
     },
     request::{RequestBuilder, RequestMethod},
     util::validate_path,
@@ -40,13 +40,7 @@ pub trait ObjectOperations {
     /// And, it is recommended to set `mime_type` in `options`
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
-    async fn put_object_from_buffer<S1, S2, B>(
-        &self,
-        bucket_name: S1,
-        object_key: S2,
-        buffer: B,
-        options: Option<PutObjectOptions>,
-    ) -> Result<PutObjectResult>
+    async fn put_object_from_buffer<S1, S2, B>(&self, bucket_name: S1, object_key: S2, buffer: B, options: Option<PutObjectOptions>) -> Result<PutObjectResult>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send,
@@ -121,13 +115,7 @@ pub trait ObjectOperations {
     /// Download object to local file
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getobject>
-    async fn get_object_to_file<S1, S2, P>(
-        &self,
-        bucket_name: S1,
-        object_key: S2,
-        file_path: P,
-        options: Option<GetObjectOptions>,
-    ) -> Result<GetObjectResult>
+    async fn get_object_to_file<S1, S2, P>(&self, bucket_name: S1, object_key: S2, file_path: P, options: Option<GetObjectOptions>) -> Result<GetObjectResult>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send,
@@ -193,14 +181,26 @@ pub trait ObjectOperations {
     /// Delete multiple objects
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/deletemultipleobjects>
-    async fn delete_multiple_objects<'c, S1, S2>(
-        &self,
-        bucket_name: S1,
-        config: DeleteMultipleObjectsConfig<'c, S2>,
-    ) -> Result<DeleteMultipleObjectsResult>
+    async fn delete_multiple_objects<'c, S1, S2>(&self, bucket_name: S1, config: DeleteMultipleObjectsConfig<'c, S2>) -> Result<DeleteMultipleObjectsResult>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send + Sync;
+
+    /// Restore object
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/restoreobject>
+    async fn restore_object<S1, S2>(&self, bucket_name: S1, object_key: S2, config: RestoreObjectRequest) -> Result<RestoreObjectResult>
+    where
+        S1: AsRef<str> + Send,
+        S2: AsRef<str> + Send;
+
+    /// Clean retored object
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/cleanrestoredobject>
+    async fn clean_restored_object<S1, S2>(&self, bucket_name: S1, object_key: S2) -> Result<()>
+    where
+        S1: AsRef<str> + Send,
+        S2: AsRef<str> + Send;
 }
 
 #[async_trait]
@@ -214,13 +214,7 @@ impl ObjectOperations for Client {
     /// - file length less than 5GB
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
-    async fn put_object_from_file<S1, S2, P>(
-        &self,
-        bucket_name: S1,
-        object_key: S2,
-        file_path: P,
-        options: Option<PutObjectOptions>,
-    ) -> Result<PutObjectResult>
+    async fn put_object_from_file<S1, S2, P>(&self, bucket_name: S1, object_key: S2, file_path: P, options: Option<PutObjectOptions>) -> Result<PutObjectResult>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send,
@@ -251,13 +245,7 @@ impl ObjectOperations for Client {
     /// And, it is recommended to set `mime_type` in `options`
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
-    async fn put_object_from_buffer<S1, S2, B>(
-        &self,
-        bucket_name: S1,
-        object_key: S2,
-        buffer: B,
-        options: Option<PutObjectOptions>,
-    ) -> Result<PutObjectResult>
+    async fn put_object_from_buffer<S1, S2, B>(&self, bucket_name: S1, object_key: S2, buffer: B, options: Option<PutObjectOptions>) -> Result<PutObjectResult>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send,
@@ -411,13 +399,7 @@ impl ObjectOperations for Client {
     /// If the `file_path` parent path does not exist, it will be created
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getobject>
-    async fn get_object_to_file<S1, S2, P>(
-        &self,
-        bucket_name: S1,
-        object_key: S2,
-        file_path: P,
-        options: Option<GetObjectOptions>,
-    ) -> Result<GetObjectResult>
+    async fn get_object_to_file<S1, S2, P>(&self, bucket_name: S1, object_key: S2, file_path: P, options: Option<GetObjectOptions>) -> Result<GetObjectResult>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send,
@@ -602,11 +584,7 @@ impl ObjectOperations for Client {
     /// Delete multiple objects
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/deletemultipleobjects>
-    async fn delete_multiple_objects<'c, S1, S2>(
-        &self,
-        bucket_name: S1,
-        config: DeleteMultipleObjectsConfig<'c, S2>,
-    ) -> Result<DeleteMultipleObjectsResult>
+    async fn delete_multiple_objects<'c, S1, S2>(&self, bucket_name: S1, config: DeleteMultipleObjectsConfig<'c, S2>) -> Result<DeleteMultipleObjectsResult>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send + Sync,
@@ -616,6 +594,38 @@ impl ObjectOperations for Client {
         let (_, content) = self.do_request::<String>(request).await?;
 
         DeleteMultipleObjectsResult::from_xml(&content)
+    }
+
+    /// Restore object
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/restoreobject>
+    async fn restore_object<S1, S2>(&self, bucket_name: S1, object_key: S2, config: RestoreObjectRequest) -> Result<RestoreObjectResult>
+    where
+        S1: AsRef<str> + Send,
+        S2: AsRef<str> + Send,
+    {
+        let request = build_restore_object_request(bucket_name.as_ref(), object_key.as_ref(), config)?;
+        let (headers, _) = self.do_request::<()>(request).await?;
+        Ok(headers.into())
+    }
+
+    /// Clean retored object
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/cleanrestoredobject>
+    async fn clean_restored_object<S1, S2>(&self, bucket_name: S1, object_key: S2) -> Result<()>
+    where
+        S1: AsRef<str> + Send,
+        S2: AsRef<str> + Send,
+    {
+        let request = RequestBuilder::new()
+            .method(RequestMethod::Post)
+            .bucket(bucket_name.as_ref())
+            .object(object_key.as_ref())
+            .add_query("cleanRestoredObject", "");
+
+        let _ = self.do_request::<()>(request).await?;
+
+        Ok(())
     }
 }
 
@@ -630,7 +640,7 @@ mod test_object_async {
         object::ObjectOperations,
         object_common::{
             CallbackBodyParameter, CallbackBuilder, DeleteMultipleObjectsConfig, GetObjectOptionsBuilder, PutObjectOptions, PutObjectOptionsBuilder,
-            PutObjectResult,
+            PutObjectResult, RestoreObjectRequest,
         },
         Client,
     };
@@ -1186,6 +1196,33 @@ mod test_object_async {
 
         let ret = response.unwrap();
 
+        log::debug!("{:#?}", ret);
+    }
+
+    #[tokio::test]
+    async fn test_restore_object_async() {
+        setup();
+        let client = Client::from_env();
+
+        let bucket = "yuanyq".to_string();
+        let object = "rust-sdk-test/test-2.webp";
+        // let file = "/home/yuanyq/Pictures/test-2.webp".to_string();
+
+        // let options = PutObjectOptionsBuilder::new()
+        //     .storage_class(StorageClass::ColdArchive)
+        //     .build();
+
+        // let response = client.put_object_from_file(&bucket, object, file, Some(options)).await;
+
+        // assert!(response.is_ok());
+
+        let response = client
+            .restore_object(&bucket, object, RestoreObjectRequest { days: 2, ..Default::default() })
+            .await;
+
+        assert!(response.is_ok());
+
+        let ret = response.unwrap();
         log::debug!("{:#?}", ret);
     }
 }

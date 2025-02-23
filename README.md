@@ -32,3 +32,5 @@ Aliyun Object Storage Service (OSS) is a massive, secure, cost-effective, and hi
   - Delete object, or delete multiple objects
   - Check if object exists
   - Append object: from file, buffer and base64 string
+  - Restore object
+  - Clean restored object

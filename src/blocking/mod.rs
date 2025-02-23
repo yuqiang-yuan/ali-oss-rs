@@ -4,7 +4,7 @@ use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use url::Url;
 
 use crate::{
-    error::{Error, Result, ErrorResponse},
+    error::{Error, ErrorResponse, Result},
     hmac_sha256, util, RequestBody,
 };
 

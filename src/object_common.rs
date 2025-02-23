@@ -1711,8 +1711,10 @@ impl<'a> CallbackBuilder<'a> {
 
     pub fn body_parameter(mut self, param: CallbackBodyParameter<'a>) -> Self {
         if let CallbackBodyParameter::Custom(_, custom_var_name, custom_var_value) = &param {
-            self.custom_variables
-                .insert(format!("x:{}", custom_var_name.strip_prefix("x:").unwrap_or(custom_var_name)), custom_var_value.clone());
+            self.custom_variables.insert(
+                format!("x:{}", custom_var_name.strip_prefix("x:").unwrap_or(custom_var_name)),
+                custom_var_value.clone(),
+            );
         }
 
         self.body_parameters.push(param);
@@ -1724,7 +1726,8 @@ impl<'a> CallbackBuilder<'a> {
     /// `k` 无需携带 `x:` 前缀，在插入的时候自动追加前缀
     pub fn custom_variable(mut self, k: impl Into<String>, v: impl Into<String>) -> Self {
         let key: String = k.into();
-        self.custom_variables.insert(format!("x:{}", key.strip_prefix("x:").unwrap_or(key.as_str())), v.into());
+        self.custom_variables
+            .insert(format!("x:{}", key.strip_prefix("x:").unwrap_or(key.as_str())), v.into());
         self
     }
 
@@ -1791,7 +1794,7 @@ impl TryFrom<&str> for RestoreJobTier {
             "Standard" => Ok(Self::Standard),
             "Expedited" => Ok(Self::Expedited),
             "Bulk" => Ok(Self::Bulk),
-            _ => Err(Error::Other(format!("invalid job tier: {}", s)))
+            _ => Err(Error::Other(format!("invalid job tier: {}", s))),
         }
     }
 }
@@ -1823,8 +1826,76 @@ pub struct RestoreObjectRequest {
     /// - 冷归档以及深度冷归档类型 Object 解冻天数的取值范围为 1~365，单位为天。
     pub days: u16,
 
+    /// 对于开启版本控制的 Bucket，Object 的各个版本可以对应不同的存储类型。
+    /// 默认解冻 Object 当前版本，您可以通过指定 `versionId` 的方式来解冻 Object 指定版本。
+    pub version_id: Option<String>,
+
     /// 冷归档、深度冷归档类型Object解冻优先级. 参见 [`RestoreJobTier`]
     pub tier: Option<RestoreJobTier>,
+}
+
+impl RestoreObjectRequest {
+    /// Consume value and build XML content for requesting
+    pub(crate) fn into_xml(self) -> Result<String> {
+        let mut writer = quick_xml::Writer::new(Vec::new());
+
+        writer.write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), None)))?;
+
+        writer.write_event(Event::Start(BytesStart::new("RestoreRequest")))?;
+
+        writer.write_event(Event::Start(BytesStart::new("Days")))?;
+        writer.write_event(Event::Text(BytesText::new(self.days.to_string().as_str())))?;
+        writer.write_event(Event::End(BytesEnd::new("Days")))?;
+
+        if let Some(t) = self.tier {
+            writer.write_event(Event::Start(BytesStart::new("JobParameters")))?;
+            writer.write_event(Event::Start(BytesStart::new("Tier")))?;
+            writer.write_event(Event::Text(BytesText::new(t.as_str())))?;
+            writer.write_event(Event::End(BytesEnd::new("Tier")))?;
+            writer.write_event(Event::End(BytesEnd::new("JobParameters")))?;
+        }
+
+        writer.write_event(Event::End(BytesEnd::new("RestoreRequest")))?;
+
+        Ok(String::from_utf8(writer.into_inner())?)
+    }
+}
+
+/// Restore object result
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+pub struct RestoreObjectResult {
+    pub request_id: String,
+    pub object_restore_priority: Option<String>,
+    pub version_id: Option<String>,
+}
+
+impl From<HashMap<String, String>> for RestoreObjectResult {
+    fn from(mut headers: HashMap<String, String>) -> Self {
+        Self {
+            request_id: headers.remove("x-oss-request-id").unwrap_or_default(),
+            object_restore_priority: headers.remove("x-oss-object-restore-priority"),
+            version_id: headers.remove("x-oss-version-id"),
+        }
+    }
+}
+
+pub(crate) fn build_restore_object_request(bucket_name: &str, object_key: &str, config: RestoreObjectRequest) -> Result<RequestBuilder> {
+    let mut request = RequestBuilder::new()
+        .method(RequestMethod::Post)
+        .bucket(bucket_name)
+        .object(object_key)
+        .add_query("restore", "");
+
+    if let Some(s) = &config.version_id {
+        request = request.add_query("versionId", s);
+    }
+
+    let xml = config.into_xml()?;
+    request = request.content_type("application/xml").content_length(xml.len() as u64).text_body(xml);
+
+    Ok(request)
 }
 
 #[cfg(test)]
