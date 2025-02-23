@@ -4,7 +4,7 @@ use base64::{prelude::BASE64_STANDARD, Engine};
 use reqwest::StatusCode;
 
 use crate::{
-    error::{ClientError, ClientResult},
+    error::{Error, Result},
     object_common::{
         build_copy_object_request, build_delete_multiple_objects_request, build_get_object_request, build_head_object_request, build_put_object_request,
         AppendObjectOptions, AppendObjectResult, CopyObjectOptions, CopyObjectResult, DeleteMultipleObjectsConfig, DeleteMultipleObjectsResult,
@@ -28,7 +28,7 @@ pub trait ObjectOperations {
         object_key: S2,
         file_path: P,
         options: Option<PutObjectOptions>,
-    ) -> ClientResult<PutObjectResult>
+    ) -> Result<PutObjectResult>
     where
         S1: AsRef<str>,
         S2: AsRef<str>,
@@ -38,7 +38,7 @@ pub trait ObjectOperations {
     /// And, it is recommended to set `mime_type` in `options`
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
-    fn put_object_from_buffer<S1, S2, B>(&self, bucket_name: S1, object_key: S2, buffer: B, options: Option<PutObjectOptions>) -> ClientResult<PutObjectResult>
+    fn put_object_from_buffer<S1, S2, B>(&self, bucket_name: S1, object_key: S2, buffer: B, options: Option<PutObjectOptions>) -> Result<PutObjectResult>
     where
         S1: AsRef<str>,
         S2: AsRef<str>,
@@ -54,7 +54,7 @@ pub trait ObjectOperations {
         object_key: S2,
         base64_string: S3,
         options: Option<PutObjectOptions>,
-    ) -> ClientResult<PutObjectResult>
+    ) -> Result<PutObjectResult>
     where
         S1: AsRef<str>,
         S2: AsRef<str>,
@@ -70,7 +70,7 @@ pub trait ObjectOperations {
         file_path: P,
         position: u64,
         options: Option<AppendObjectOptions>,
-    ) -> ClientResult<AppendObjectResult>
+    ) -> Result<AppendObjectResult>
     where
         S1: AsRef<str>,
         S2: AsRef<str>,
@@ -87,7 +87,7 @@ pub trait ObjectOperations {
         buffer: B,
         position: u64,
         options: Option<AppendObjectOptions>,
-    ) -> ClientResult<AppendObjectResult>
+    ) -> Result<AppendObjectResult>
     where
         S1: AsRef<str>,
         S2: AsRef<str>,
@@ -104,7 +104,7 @@ pub trait ObjectOperations {
         base64_string: S3,
         position: u64,
         options: Option<AppendObjectOptions>,
-    ) -> ClientResult<AppendObjectResult>
+    ) -> Result<AppendObjectResult>
     where
         S1: AsRef<str>,
         S2: AsRef<str>,
@@ -113,7 +113,7 @@ pub trait ObjectOperations {
     /// Uploads a file to a specified bucket and object key.
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getobject>
-    fn get_object_to_file<S1, S2, P>(&self, bucket_name: S1, object_key: S2, file_path: P, options: Option<GetObjectOptions>) -> ClientResult<GetObjectResult>
+    fn get_object_to_file<S1, S2, P>(&self, bucket_name: S1, object_key: S2, file_path: P, options: Option<GetObjectOptions>) -> Result<GetObjectResult>
     where
         S1: AsRef<str>,
         S2: AsRef<str>,
@@ -122,7 +122,7 @@ pub trait ObjectOperations {
     /// Create a "folder"
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
-    fn create_folder<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<PutObjectOptions>) -> ClientResult<PutObjectResult>
+    fn create_folder<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<PutObjectOptions>) -> Result<PutObjectResult>
     where
         S1: AsRef<str>,
         S2: AsRef<str>;
@@ -130,7 +130,7 @@ pub trait ObjectOperations {
     /// Get object metadata
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getobjectmeta>
-    fn get_object_metadata<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<GetObjectMetadataOptions>) -> ClientResult<ObjectMetadata>
+    fn get_object_metadata<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<GetObjectMetadataOptions>) -> Result<ObjectMetadata>
     where
         S1: AsRef<str>,
         S2: AsRef<str>;
@@ -138,7 +138,7 @@ pub trait ObjectOperations {
     /// Check if the object exists or not using get object metadata
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getobjectmeta>
-    fn exists<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<GetObjectMetadataOptions>) -> ClientResult<bool>
+    fn exists<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<GetObjectMetadataOptions>) -> Result<bool>
     where
         S1: AsRef<str>,
         S2: AsRef<str>;
@@ -146,7 +146,7 @@ pub trait ObjectOperations {
     /// Head object
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/headobject>
-    fn head_object<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<HeadObjectOptions>) -> ClientResult<ObjectMetadata>
+    fn head_object<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<HeadObjectOptions>) -> Result<ObjectMetadata>
     where
         S1: AsRef<str>,
         S2: AsRef<str>;
@@ -161,7 +161,7 @@ pub trait ObjectOperations {
         dest_bucket_name: S3,
         dest_object_key: S4,
         options: Option<CopyObjectOptions>,
-    ) -> ClientResult<CopyObjectResult>
+    ) -> Result<CopyObjectResult>
     where
         S1: AsRef<str>,
         S2: AsRef<str>,
@@ -171,7 +171,7 @@ pub trait ObjectOperations {
     /// Delete an object
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/deleteobject>
-    fn delete_object<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<DeleteObjectOptions>) -> ClientResult<DeleteObjectResult>
+    fn delete_object<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<DeleteObjectOptions>) -> Result<DeleteObjectResult>
     where
         S1: AsRef<str>,
         S2: AsRef<str>;
@@ -179,7 +179,7 @@ pub trait ObjectOperations {
     /// Delete multiple objects
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/deletemultipleobjects>
-    fn delete_multiple_objects<S1, S2>(&self, bucket_name: S1, config: DeleteMultipleObjectsConfig<'_, S2>) -> ClientResult<DeleteMultipleObjectsResult>
+    fn delete_multiple_objects<S1, S2>(&self, bucket_name: S1, config: DeleteMultipleObjectsConfig<'_, S2>) -> Result<DeleteMultipleObjectsResult>
     where
         S1: AsRef<str>,
         S2: AsRef<str>;
@@ -189,7 +189,7 @@ impl ObjectOperations for Client {
     /// Uploads a file to a specified bucket and object key.
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
-    fn put_object_from_file<S1, S2, P>(&self, bucket_name: S1, object_key: S2, file_path: P, options: Option<PutObjectOptions>) -> ClientResult<PutObjectResult>
+    fn put_object_from_file<S1, S2, P>(&self, bucket_name: S1, object_key: S2, file_path: P, options: Option<PutObjectOptions>) -> Result<PutObjectResult>
     where
         S1: AsRef<str>,
         S2: AsRef<str>,
@@ -220,7 +220,7 @@ impl ObjectOperations for Client {
     /// And, it is recommended to set `mime_type` in `options`
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
-    fn put_object_from_buffer<S1, S2, B>(&self, bucket_name: S1, object_key: S2, buffer: B, options: Option<PutObjectOptions>) -> ClientResult<PutObjectResult>
+    fn put_object_from_buffer<S1, S2, B>(&self, bucket_name: S1, object_key: S2, buffer: B, options: Option<PutObjectOptions>) -> Result<PutObjectResult>
     where
         S1: AsRef<str>,
         S2: AsRef<str>,
@@ -255,7 +255,7 @@ impl ObjectOperations for Client {
         object_key: S2,
         base64_string: S3,
         options: Option<PutObjectOptions>,
-    ) -> ClientResult<PutObjectResult>
+    ) -> Result<PutObjectResult>
     where
         S1: AsRef<str>,
         S2: AsRef<str>,
@@ -264,7 +264,7 @@ impl ObjectOperations for Client {
         let data = if let Ok(d) = BASE64_STANDARD.decode(base64_string.as_ref()) {
             d
         } else {
-            return Err(ClientError::Error("Decoding base64 string failed".to_string()));
+            return Err(Error::Other("Decoding base64 string failed".to_string()));
         };
 
         self.put_object_from_buffer(bucket_name, object_key, data, options)
@@ -280,7 +280,7 @@ impl ObjectOperations for Client {
         file_path: P,
         position: u64,
         options: Option<AppendObjectOptions>,
-    ) -> ClientResult<AppendObjectResult>
+    ) -> Result<AppendObjectResult>
     where
         S1: AsRef<str>,
         S2: AsRef<str>,
@@ -318,7 +318,7 @@ impl ObjectOperations for Client {
         buffer: B,
         position: u64,
         options: Option<AppendObjectOptions>,
-    ) -> ClientResult<AppendObjectResult>
+    ) -> Result<AppendObjectResult>
     where
         S1: AsRef<str>,
         S2: AsRef<str>,
@@ -354,7 +354,7 @@ impl ObjectOperations for Client {
         base64_string: S3,
         position: u64,
         options: Option<AppendObjectOptions>,
-    ) -> ClientResult<AppendObjectResult>
+    ) -> Result<AppendObjectResult>
     where
         S1: AsRef<str>,
         S2: AsRef<str>,
@@ -363,7 +363,7 @@ impl ObjectOperations for Client {
         let data = if let Ok(d) = BASE64_STANDARD.decode(base64_string.as_ref()) {
             d
         } else {
-            return Err(ClientError::Error("Decoding base64 string failed".to_string()));
+            return Err(Error::Other("Decoding base64 string failed".to_string()));
         };
 
         self.append_object_from_buffer(bucket_name, object_key, data, position, options)
@@ -372,7 +372,7 @@ impl ObjectOperations for Client {
     /// Uploads a file to a specified bucket and object key.
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getobject>
-    fn get_object_to_file<S1, S2, P>(&self, bucket_name: S1, object_key: S2, file_path: P, options: Option<GetObjectOptions>) -> ClientResult<GetObjectResult>
+    fn get_object_to_file<S1, S2, P>(&self, bucket_name: S1, object_key: S2, file_path: P, options: Option<GetObjectOptions>) -> Result<GetObjectResult>
     where
         S1: AsRef<str>,
         S2: AsRef<str>,
@@ -389,7 +389,7 @@ impl ObjectOperations for Client {
         };
 
         if !validate_path(&file_path) {
-            return Err(ClientError::Error(format!("invalid file path: {:?}", file_path.as_os_str().to_str())));
+            return Err(Error::Other(format!("invalid file path: {:?}", file_path.as_os_str().to_str())));
         }
 
         // check parent path
@@ -411,7 +411,7 @@ impl ObjectOperations for Client {
     /// Create a "folder"
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
-    fn create_folder<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<PutObjectOptions>) -> ClientResult<PutObjectResult>
+    fn create_folder<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<PutObjectOptions>) -> Result<PutObjectResult>
     where
         S1: AsRef<str>,
         S2: AsRef<str>,
@@ -435,7 +435,7 @@ impl ObjectOperations for Client {
     /// Get object metadata
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getobjectmeta>
-    fn get_object_metadata<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<GetObjectMetadataOptions>) -> ClientResult<ObjectMetadata>
+    fn get_object_metadata<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<GetObjectMetadataOptions>) -> Result<ObjectMetadata>
     where
         S1: AsRef<str>,
         S2: AsRef<str>,
@@ -462,7 +462,7 @@ impl ObjectOperations for Client {
     /// Check if the object exists or not using get object metadata
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getobjectmeta>
-    fn exists<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<GetObjectMetadataOptions>) -> ClientResult<bool>
+    fn exists<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<GetObjectMetadataOptions>) -> Result<bool>
     where
         S1: AsRef<str>,
         S2: AsRef<str>,
@@ -470,7 +470,7 @@ impl ObjectOperations for Client {
         match self.get_object_metadata(bucket_name, object_key, options) {
             Ok(_) => Ok(true),
             Err(e) => match e {
-                ClientError::StatusError(status) if status == StatusCode::NOT_FOUND => Ok(false),
+                Error::StatusError(status) if status == StatusCode::NOT_FOUND => Ok(false),
                 _ => Err(e),
             },
         }
@@ -479,7 +479,7 @@ impl ObjectOperations for Client {
     /// Head object
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/headobject>
-    fn head_object<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<HeadObjectOptions>) -> ClientResult<ObjectMetadata>
+    fn head_object<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<HeadObjectOptions>) -> Result<ObjectMetadata>
     where
         S1: AsRef<str>,
         S2: AsRef<str>,
@@ -503,7 +503,7 @@ impl ObjectOperations for Client {
         dest_bucket_name: S3,
         dest_object_key: S4,
         options: Option<CopyObjectOptions>,
-    ) -> ClientResult<CopyObjectResult>
+    ) -> Result<CopyObjectResult>
     where
         S1: AsRef<str>,
         S2: AsRef<str>,
@@ -526,7 +526,7 @@ impl ObjectOperations for Client {
     /// Delete an object
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/deleteobject>
-    fn delete_object<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<DeleteObjectOptions>) -> ClientResult<DeleteObjectResult>
+    fn delete_object<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<DeleteObjectOptions>) -> Result<DeleteObjectResult>
     where
         S1: AsRef<str>,
         S2: AsRef<str>,
@@ -550,7 +550,7 @@ impl ObjectOperations for Client {
     /// Delete multiple objects
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/deletemultipleobjects>
-    fn delete_multiple_objects<S1, S2>(&self, bucket_name: S1, config: DeleteMultipleObjectsConfig<'_, S2>) -> ClientResult<DeleteMultipleObjectsResult>
+    fn delete_multiple_objects<S1, S2>(&self, bucket_name: S1, config: DeleteMultipleObjectsConfig<'_, S2>) -> Result<DeleteMultipleObjectsResult>
     where
         S1: AsRef<str>,
         S2: AsRef<str>,

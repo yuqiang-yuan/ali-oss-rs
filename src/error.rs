@@ -29,7 +29,7 @@ pub struct ErrorResponse {
 }
 
 impl ErrorResponse {
-    pub fn from_xml(xml_content: &str) -> ClientResult<Self> {
+    pub fn from_xml(xml_content: &str) -> Result<Self> {
         let mut reader = quick_xml::Reader::from_str(xml_content);
         let mut ret = Self::default();
 
@@ -72,7 +72,7 @@ impl Display for ErrorResponse {
 }
 
 #[derive(Error, Debug)]
-pub enum ClientError {
+pub enum Error {
     #[error("{0}")]
     InvalidHeaderName(#[from] reqwest::header::InvalidHeaderName),
 
@@ -110,7 +110,7 @@ pub enum ClientError {
     DecodeError(#[from] base64::DecodeError),
 
     #[error("{0}")]
-    Error(String),
+    Other(String),
 }
 
-pub type ClientResult<T> = Result<T, ClientError>;
+pub type Result<T> = std::result::Result<T, self::Error>;

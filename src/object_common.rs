@@ -5,7 +5,7 @@ use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 
 use crate::{
     common::{self, build_tag_string, Acl, MetadataDirective, ObjectType, ServerSideEncryptionAlgorithm, StorageClass, TagDirective, MIME_TYPE_XML},
-    error::{ClientError, ClientResult},
+    error::{Error, Result},
     request::{RequestBuilder, RequestMethod},
     util::{sanitize_etag, validate_meta_key, validate_object_key, validate_tag_key, validate_tag_value},
     RequestBody,
@@ -49,36 +49,36 @@ impl ContentEncoding {
 }
 
 impl TryFrom<&str> for ContentEncoding {
-    type Error = ClientError;
+    type Error = Error;
 
     /// Try to create a ContentEncoding from a string.
     /// Acceptable values are "identity", "gzip", "deflate", "compress", and "br".
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
+    fn try_from(value: &str) -> std::result::Result<Self, Self::Error> {
         match value.to_lowercase().as_str() {
             "identity" => Ok(ContentEncoding::Identity),
             "gzip" => Ok(ContentEncoding::Gzip),
             "deflate" => Ok(ContentEncoding::Deflate),
             "compress" => Ok(ContentEncoding::Compress),
             "br" => Ok(ContentEncoding::Brotli),
-            _ => Err(ClientError::Error(format!("invalid content encoding: {}", value))),
+            _ => Err(Error::Other(format!("invalid content encoding: {}", value))),
         }
     }
 }
 
 impl TryFrom<&String> for ContentEncoding {
-    type Error = ClientError;
+    type Error = Error;
 
     /// See [`try_from(value: &str)`] for more details.
-    fn try_from(value: &String) -> Result<Self, Self::Error> {
+    fn try_from(value: &String) -> std::result::Result<Self, Self::Error> {
         Self::try_from(value.as_str())
     }
 }
 
 impl TryFrom<String> for ContentEncoding {
-    type Error = ClientError;
+    type Error = Error;
 
     /// See [`try_from(value: &str)`] for more details.
-    fn try_from(value: String) -> Result<Self, Self::Error> {
+    fn try_from(value: String) -> std::result::Result<Self, Self::Error> {
         Self::try_from(value.as_str())
     }
 }
@@ -512,22 +512,22 @@ pub(crate) fn build_put_object_request(
     object_key: &str,
     request_body: RequestBody,
     options: &Option<PutObjectOptions>,
-) -> ClientResult<RequestBuilder> {
+) -> Result<RequestBuilder> {
     if bucket_name.is_empty() || object_key.is_empty() {
-        return Err(ClientError::Error("bucket_name and object_key cannot be empty".to_string()));
+        return Err(Error::Other("bucket_name and object_key cannot be empty".to_string()));
     }
 
     // check for metadata and tags
     if let Some(options) = &options {
         for (k, v) in &options.metadata {
             if k.is_empty() || !validate_meta_key(k) || v.is_empty() {
-                return Err(ClientError::Error(format!("invalid meta data: \"{}: {}\". the key must starts with `x-oss-meta-`, and only `[0-9a-z\\-]` are allowed; the key and value must not be empty", k, v)));
+                return Err(Error::Other(format!("invalid meta data: \"{}: {}\". the key must starts with `x-oss-meta-`, and only `[0-9a-z\\-]` are allowed; the key and value must not be empty", k, v)));
             }
         }
 
         for (k, v) in &options.tags {
             if k.is_empty() || !validate_tag_key(k) || (!v.is_empty() && !validate_tag_value(v)) {
-                return Err(ClientError::Error(format!(
+                return Err(Error::Other(format!(
                     "invalid tagging data: \"{}={}\". only `[0-9a-zA-Z\\+\\-=\\.:/]` and space character are allowed",
                     k, v
                 )));
@@ -543,7 +543,7 @@ pub(crate) fn build_put_object_request(
         RequestBody::Bytes(bytes) => bytes.len() as u64,
         RequestBody::File(file_path) => {
             if !file_path.exists() || !file_path.is_file() {
-                return Err(ClientError::Error(format!(
+                return Err(Error::Other(format!(
                     "{} does not exist or is not a regular file",
                     file_path.as_os_str().to_str().unwrap_or("UNKNOWN")
                 )));
@@ -557,7 +557,7 @@ pub(crate) fn build_put_object_request(
 
     // max file size for putting object is 5GB
     if content_length > 5_368_709_120 {
-        return Err(ClientError::Error(format!("length {} exceeds limitation. max allowed is 5GB", content_length)));
+        return Err(Error::Other(format!("length {} exceeds limitation. max allowed is 5GB", content_length)));
     }
 
     request = request.content_length(content_length);
@@ -1073,9 +1073,9 @@ pub(crate) fn build_copy_object_request(
     dest_bucket_name: &str,
     dest_object_key: &str,
     options: &Option<CopyObjectOptions>,
-) -> ClientResult<RequestBuilder> {
+) -> Result<RequestBuilder> {
     if !validate_object_key(dest_object_key) {
-        return Err(ClientError::Error(format!("invalid object key: {}", dest_object_key)));
+        return Err(Error::Other(format!("invalid object key: {}", dest_object_key)));
     }
 
     let mut request = RequestBuilder::new()
@@ -1091,13 +1091,13 @@ pub(crate) fn build_copy_object_request(
         // validate metadata key and taggings
         for (k, _) in options.metadata.iter() {
             if !validate_meta_key(k) {
-                return Err(ClientError::Error(format!("invalid metadata key: {}", k)));
+                return Err(Error::Other(format!("invalid metadata key: {}", k)));
             }
         }
 
         for (k, v) in options.tags.iter() {
             if !validate_tag_key(k) || !validate_tag_value(v) {
-                return Err(ClientError::Error(format!("invalid tagging data: {}={}", k, v)));
+                return Err(Error::Other(format!("invalid tagging data: {}={}", k, v)));
             }
         }
 
@@ -1328,7 +1328,7 @@ pub struct DeleteMultipleObjectsRequest {
 
 impl DeleteMultipleObjectsRequest {
     /// Consumes data and generate xml content
-    pub(crate) fn into_xml(self) -> ClientResult<String> {
+    pub(crate) fn into_xml(self) -> Result<String> {
         let mut writer = quick_xml::Writer::new(Vec::new());
         writer.write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), None)))?;
 
@@ -1410,7 +1410,7 @@ pub struct DeleteMultipleObjectsResult {
 }
 
 impl DeleteMultipleObjectsResult {
-    pub fn from_xml(xml_content: &str) -> ClientResult<Self> {
+    pub fn from_xml(xml_content: &str) -> Result<Self> {
         let mut reader = quick_xml::Reader::from_str(xml_content);
         let mut tag = String::new();
         let mut items = Vec::new();
@@ -1453,7 +1453,7 @@ impl DeleteMultipleObjectsResult {
     }
 }
 
-pub(crate) fn build_delete_multiple_objects_request<S>(bucket_name: &str, config: DeleteMultipleObjectsConfig<S>) -> ClientResult<RequestBuilder>
+pub(crate) fn build_delete_multiple_objects_request<S>(bucket_name: &str, config: DeleteMultipleObjectsConfig<S>) -> Result<RequestBuilder>
 where
     S: AsRef<str>,
 {
@@ -1469,7 +1469,7 @@ where
     };
 
     if items_len > common::DELETE_MULTIPLE_OBJECTS_LIMIT {
-        return Err(ClientError::Error(format!(
+        return Err(Error::Other(format!(
             "{} exceeds the items count limits while deleting multiple objects",
             items_len
         )));
@@ -1784,30 +1784,30 @@ impl AsRef<str> for RestoreJobTier {
 }
 
 impl TryFrom<&str> for RestoreJobTier {
-    type Error = ClientError;
+    type Error = Error;
 
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
+    fn try_from(s: &str) -> std::result::Result<Self, Self::Error> {
         match s {
             "Standard" => Ok(Self::Standard),
             "Expedited" => Ok(Self::Expedited),
             "Bulk" => Ok(Self::Bulk),
-            _ => Err(ClientError::Error(format!("invalid job tier: {}", s)))
+            _ => Err(Error::Other(format!("invalid job tier: {}", s)))
         }
     }
 }
 
 impl TryFrom<&String> for RestoreJobTier {
-    type Error = ClientError;
+    type Error = Error;
 
-    fn try_from(s: &String) -> Result<Self, Self::Error> {
+    fn try_from(s: &String) -> std::result::Result<Self, Self::Error> {
         Self::try_from(s.as_str())
     }
 }
 
 impl TryFrom<String> for RestoreJobTier {
-    type Error = ClientError;
+    type Error = Error;
 
-    fn try_from(s: String) -> Result<Self, Self::Error> {
+    fn try_from(s: String) -> std::result::Result<Self, Self::Error> {
         Self::try_from(s.as_str())
     }
 }

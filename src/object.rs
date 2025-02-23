@@ -7,7 +7,7 @@ use reqwest::StatusCode;
 use tokio::io::AsyncWriteExt;
 
 use crate::{
-    error::{ClientError, ClientResult},
+    error::{Error, Result},
     object_common::{
         build_copy_object_request, build_delete_multiple_objects_request, build_get_object_request, build_head_object_request, build_put_object_request,
         AppendObjectOptions, AppendObjectResult, CopyObjectOptions, CopyObjectResult, DeleteMultipleObjectsConfig, DeleteMultipleObjectsResult,
@@ -30,7 +30,7 @@ pub trait ObjectOperations {
         object_key: S2,
         file_path: P,
         options: Option<PutObjectOptions>,
-    ) -> ClientResult<PutObjectResult>
+    ) -> Result<PutObjectResult>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send,
@@ -46,7 +46,7 @@ pub trait ObjectOperations {
         object_key: S2,
         buffer: B,
         options: Option<PutObjectOptions>,
-    ) -> ClientResult<PutObjectResult>
+    ) -> Result<PutObjectResult>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send,
@@ -62,7 +62,7 @@ pub trait ObjectOperations {
         object_key: S2,
         base64_string: S3,
         options: Option<PutObjectOptions>,
-    ) -> ClientResult<PutObjectResult>
+    ) -> Result<PutObjectResult>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send,
@@ -78,7 +78,7 @@ pub trait ObjectOperations {
         file_path: P,
         position: u64,
         options: Option<AppendObjectOptions>,
-    ) -> ClientResult<AppendObjectResult>
+    ) -> Result<AppendObjectResult>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send,
@@ -95,7 +95,7 @@ pub trait ObjectOperations {
         buffer: B,
         position: u64,
         options: Option<AppendObjectOptions>,
-    ) -> ClientResult<AppendObjectResult>
+    ) -> Result<AppendObjectResult>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send,
@@ -112,7 +112,7 @@ pub trait ObjectOperations {
         base64_string: S3,
         position: u64,
         options: Option<AppendObjectOptions>,
-    ) -> ClientResult<AppendObjectResult>
+    ) -> Result<AppendObjectResult>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send,
@@ -127,7 +127,7 @@ pub trait ObjectOperations {
         object_key: S2,
         file_path: P,
         options: Option<GetObjectOptions>,
-    ) -> ClientResult<GetObjectResult>
+    ) -> Result<GetObjectResult>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send,
@@ -136,7 +136,7 @@ pub trait ObjectOperations {
     /// Create a "folder"
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
-    async fn create_folder<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<PutObjectOptions>) -> ClientResult<PutObjectResult>
+    async fn create_folder<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<PutObjectOptions>) -> Result<PutObjectResult>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send;
@@ -144,7 +144,7 @@ pub trait ObjectOperations {
     /// Get object metadata
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getobjectmeta>
-    async fn get_object_metadata<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<GetObjectMetadataOptions>) -> ClientResult<ObjectMetadata>
+    async fn get_object_metadata<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<GetObjectMetadataOptions>) -> Result<ObjectMetadata>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send;
@@ -152,7 +152,7 @@ pub trait ObjectOperations {
     /// Check if the object exists or not using get object metadata
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getobjectmeta>
-    async fn exists<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<GetObjectMetadataOptions>) -> ClientResult<bool>
+    async fn exists<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<GetObjectMetadataOptions>) -> Result<bool>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send;
@@ -160,7 +160,7 @@ pub trait ObjectOperations {
     /// Head object
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/headobject>
-    async fn head_object<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<HeadObjectOptions>) -> ClientResult<ObjectMetadata>
+    async fn head_object<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<HeadObjectOptions>) -> Result<ObjectMetadata>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send;
@@ -175,7 +175,7 @@ pub trait ObjectOperations {
         dest_bucket_name: S3,
         dest_object_key: S4,
         options: Option<CopyObjectOptions>,
-    ) -> ClientResult<CopyObjectResult>
+    ) -> Result<CopyObjectResult>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send,
@@ -185,7 +185,7 @@ pub trait ObjectOperations {
     /// Delete an object
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/deleteobject>
-    async fn delete_object<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<DeleteObjectOptions>) -> ClientResult<DeleteObjectResult>
+    async fn delete_object<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<DeleteObjectOptions>) -> Result<DeleteObjectResult>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send;
@@ -197,7 +197,7 @@ pub trait ObjectOperations {
         &self,
         bucket_name: S1,
         config: DeleteMultipleObjectsConfig<'c, S2>,
-    ) -> ClientResult<DeleteMultipleObjectsResult>
+    ) -> Result<DeleteMultipleObjectsResult>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send + Sync;
@@ -220,7 +220,7 @@ impl ObjectOperations for Client {
         object_key: S2,
         file_path: P,
         options: Option<PutObjectOptions>,
-    ) -> ClientResult<PutObjectResult>
+    ) -> Result<PutObjectResult>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send,
@@ -257,7 +257,7 @@ impl ObjectOperations for Client {
         object_key: S2,
         buffer: B,
         options: Option<PutObjectOptions>,
-    ) -> ClientResult<PutObjectResult>
+    ) -> Result<PutObjectResult>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send,
@@ -292,7 +292,7 @@ impl ObjectOperations for Client {
         object_key: S2,
         base64_string: S3,
         options: Option<PutObjectOptions>,
-    ) -> ClientResult<PutObjectResult>
+    ) -> Result<PutObjectResult>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send,
@@ -301,7 +301,7 @@ impl ObjectOperations for Client {
         let data = if let Ok(d) = BASE64_STANDARD.decode(base64_string.as_ref()) {
             d
         } else {
-            return Err(ClientError::Error("Decoding base64 string failed".to_string()));
+            return Err(Error::Other("Decoding base64 string failed".to_string()));
         };
 
         self.put_object_from_buffer(bucket_name, object_key, data, options).await
@@ -317,7 +317,7 @@ impl ObjectOperations for Client {
         file_path: P,
         position: u64,
         options: Option<AppendObjectOptions>,
-    ) -> ClientResult<AppendObjectResult>
+    ) -> Result<AppendObjectResult>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send,
@@ -355,7 +355,7 @@ impl ObjectOperations for Client {
         buffer: B,
         position: u64,
         options: Option<AppendObjectOptions>,
-    ) -> ClientResult<AppendObjectResult>
+    ) -> Result<AppendObjectResult>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send,
@@ -391,7 +391,7 @@ impl ObjectOperations for Client {
         base64_string: S3,
         position: u64,
         options: Option<AppendObjectOptions>,
-    ) -> ClientResult<AppendObjectResult>
+    ) -> Result<AppendObjectResult>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send,
@@ -400,7 +400,7 @@ impl ObjectOperations for Client {
         let data = if let Ok(d) = BASE64_STANDARD.decode(base64_string.as_ref()) {
             d
         } else {
-            return Err(ClientError::Error("Decoding base64 string failed".to_string()));
+            return Err(Error::Other("Decoding base64 string failed".to_string()));
         };
 
         self.append_object_from_buffer(bucket_name, object_key, data, position, options).await
@@ -417,7 +417,7 @@ impl ObjectOperations for Client {
         object_key: S2,
         file_path: P,
         options: Option<GetObjectOptions>,
-    ) -> ClientResult<GetObjectResult>
+    ) -> Result<GetObjectResult>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send,
@@ -434,7 +434,7 @@ impl ObjectOperations for Client {
         };
 
         if !validate_path(&file_path) {
-            return Err(ClientError::Error(format!("invalid file path: {:?}", file_path.as_os_str().to_str())));
+            return Err(Error::Other(format!("invalid file path: {:?}", file_path.as_os_str().to_str())));
         }
 
         // check parent path
@@ -463,7 +463,7 @@ impl ObjectOperations for Client {
     /// The `object_key` must ends with `/`
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
-    async fn create_folder<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<PutObjectOptions>) -> ClientResult<PutObjectResult>
+    async fn create_folder<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<PutObjectOptions>) -> Result<PutObjectResult>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send,
@@ -487,7 +487,7 @@ impl ObjectOperations for Client {
     /// Get object metadata.
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getobjectmeta>
-    async fn get_object_metadata<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<GetObjectMetadataOptions>) -> ClientResult<ObjectMetadata>
+    async fn get_object_metadata<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<GetObjectMetadataOptions>) -> Result<ObjectMetadata>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send,
@@ -514,7 +514,7 @@ impl ObjectOperations for Client {
     /// Check if the object exists or not using get object metadata
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getobjectmeta>
-    async fn exists<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<GetObjectMetadataOptions>) -> ClientResult<bool>
+    async fn exists<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<GetObjectMetadataOptions>) -> Result<bool>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send,
@@ -522,7 +522,7 @@ impl ObjectOperations for Client {
         match self.get_object_metadata(bucket_name, object_key, options).await {
             Ok(_) => Ok(true),
             Err(e) => match e {
-                ClientError::StatusError(status) if status == StatusCode::NOT_FOUND => Ok(false),
+                Error::StatusError(status) if status == StatusCode::NOT_FOUND => Ok(false),
                 _ => Err(e),
             },
         }
@@ -531,7 +531,7 @@ impl ObjectOperations for Client {
     /// Get more detail object metadata
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/headobject>
-    async fn head_object<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<HeadObjectOptions>) -> ClientResult<ObjectMetadata>
+    async fn head_object<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<HeadObjectOptions>) -> Result<ObjectMetadata>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send,
@@ -555,7 +555,7 @@ impl ObjectOperations for Client {
         dest_bucket_name: S3,
         dest_object_key: S4,
         options: Option<CopyObjectOptions>,
-    ) -> ClientResult<CopyObjectResult>
+    ) -> Result<CopyObjectResult>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send,
@@ -578,7 +578,7 @@ impl ObjectOperations for Client {
     /// Delete an object
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/deleteobject>
-    async fn delete_object<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<DeleteObjectOptions>) -> ClientResult<DeleteObjectResult>
+    async fn delete_object<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<DeleteObjectOptions>) -> Result<DeleteObjectResult>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send,
@@ -606,7 +606,7 @@ impl ObjectOperations for Client {
         &self,
         bucket_name: S1,
         config: DeleteMultipleObjectsConfig<'c, S2>,
-    ) -> ClientResult<DeleteMultipleObjectsResult>
+    ) -> Result<DeleteMultipleObjectsResult>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send + Sync,

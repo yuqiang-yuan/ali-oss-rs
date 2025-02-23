@@ -4,7 +4,7 @@ use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use url::Url;
 
 use crate::{
-    error::{ClientError, ClientResult, ErrorResponse},
+    error::{Error, Result, ErrorResponse},
     hmac_sha256, util, RequestBody,
 };
 
@@ -101,7 +101,7 @@ impl Client {
     /// So I put them in this method to prevent re-generating
     /// and better debuging output.
     /// And add some default headers to the request builder.
-    pub(crate) fn do_request<T>(&self, request_builder: crate::request::RequestBuilder) -> ClientResult<(HashMap<String, String>, T)>
+    pub(crate) fn do_request<T>(&self, request_builder: crate::request::RequestBuilder) -> Result<(HashMap<String, String>, T)>
     where
         T: FromResponse,
     {
@@ -195,15 +195,15 @@ impl Client {
                     log::error!("{}", s);
                     if s.is_empty() {
                         log::error!("call api failed with status: \"{}\". full url: {}", status, full_url);
-                        Err(ClientError::StatusError(status))
+                        Err(Error::StatusError(status))
                     } else {
                         let error_response = ErrorResponse::from_xml(&s)?;
-                        Err(ClientError::ApiError(Box::new(error_response)))
+                        Err(Error::ApiError(Box::new(error_response)))
                     }
                 }
                 Err(_) => {
                     log::error!("call api failed with status: \"{}\". full url: {}", status, full_url);
-                    Err(ClientError::StatusError(status))
+                    Err(Error::StatusError(status))
                 }
             }
         } else {
@@ -213,18 +213,18 @@ impl Client {
 }
 
 pub(crate) trait FromResponse: Sized {
-    fn from_response(response: reqwest::blocking::Response) -> ClientResult<Self>;
+    fn from_response(response: reqwest::blocking::Response) -> Result<Self>;
 }
 
 impl FromResponse for String {
-    fn from_response(response: reqwest::blocking::Response) -> ClientResult<Self> {
+    fn from_response(response: reqwest::blocking::Response) -> Result<Self> {
         let text = response.text()?;
         Ok(text)
     }
 }
 
 impl FromResponse for Vec<u8> {
-    fn from_response(response: reqwest::blocking::Response) -> ClientResult<Self> {
+    fn from_response(response: reqwest::blocking::Response) -> Result<Self> {
         let bytes = response.bytes()?;
         Ok(bytes.to_vec())
     }
@@ -234,7 +234,7 @@ impl FromResponse for Vec<u8> {
 pub(crate) struct BytesBody(reqwest::blocking::Response);
 
 impl BytesBody {
-    pub fn save_to_file<P: AsRef<Path>>(&mut self, path: P) -> ClientResult<()> {
+    pub fn save_to_file<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
         let mut file = File::create(path)?;
         self.0.copy_to(&mut file)?;
         Ok(())
@@ -242,13 +242,13 @@ impl BytesBody {
 }
 
 impl FromResponse for BytesBody {
-    fn from_response(response: reqwest::blocking::Response) -> ClientResult<Self> {
+    fn from_response(response: reqwest::blocking::Response) -> Result<Self> {
         Ok(Self(response))
     }
 }
 
 impl FromResponse for () {
-    fn from_response(_: reqwest::blocking::Response) -> ClientResult<Self> {
+    fn from_response(_: reqwest::blocking::Response) -> Result<Self> {
         Ok(())
     }
 }

@@ -3,7 +3,7 @@ use std::{collections::HashMap, fmt::Display};
 
 use quick_xml::events::Event;
 
-use crate::error::{ClientError, ClientResult};
+use crate::error::{Error, Result};
 
 pub const MIME_TYPE_XML: &str = "application/xml";
 pub const DELETE_MULTIPLE_OBJECTS_LIMIT: usize = 1000;
@@ -17,7 +17,7 @@ pub struct Owner {
 }
 
 impl Owner {
-    pub(crate) fn from_xml_reader(reader: &mut quick_xml::Reader<&[u8]>) -> ClientResult<Self> {
+    pub(crate) fn from_xml_reader(reader: &mut quick_xml::Reader<&[u8]>) -> Result<Self> {
         let mut current_tag = "".to_string();
         let mut owner = Self::default();
 
@@ -94,30 +94,30 @@ impl AsRef<str> for Acl {
 }
 
 impl TryFrom<&str> for Acl {
-    type Error = ClientError;
+    type Error = crate::error::Error;
 
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
+    fn try_from(s: &str) -> std::result::Result<Self, Self::Error> {
         match s {
             "public-read-write" => Ok(Acl::PublicReadWrite),
             "public-read" => Ok(Acl::PublicRead),
             "private" => Ok(Acl::Private),
-            _ => Err(ClientError::Error(format!("Invalid ACL value: {}", s))),
+            _ => Err(Error::Other(format!("Invalid ACL value: {}", s))),
         }
     }
 }
 
 impl TryFrom<String> for Acl {
-    type Error = ClientError;
+    type Error = crate::error::Error;
 
-    fn try_from(s: String) -> Result<Self, Self::Error> {
+    fn try_from(s: String) -> std::result::Result<Self, Self::Error> {
         Self::try_from(s.as_str())
     }
 }
 
 impl TryFrom<&String> for Acl {
-    type Error = ClientError;
+    type Error = crate::error::Error;
 
-    fn try_from(s: &String) -> Result<Self, Self::Error> {
+    fn try_from(s: &String) -> std::result::Result<Self, Self::Error> {
         Self::try_from(s.as_str())
     }
 }
@@ -176,32 +176,32 @@ impl AsRef<str> for StorageClass {
 }
 
 impl TryFrom<&str> for StorageClass {
-    type Error = ClientError;
+    type Error = crate::error::Error;
 
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
+    fn try_from(s: &str) -> std::result::Result<Self, Self::Error> {
         match s {
             "Standard" => Ok(StorageClass::Standard),
             "IA" => Ok(StorageClass::IA),
             "Archive" => Ok(StorageClass::Archive),
             "ColdArchive" => Ok(StorageClass::ColdArchive),
             "DeepColdArchive" => Ok(StorageClass::DeepColdArchive),
-            _ => Err(ClientError::Error(format!("Invalid StorageClass value: {}", s))),
+            _ => Err(Error::Other(format!("Invalid StorageClass value: {}", s))),
         }
     }
 }
 
 impl TryFrom<String> for StorageClass {
-    type Error = ClientError;
+    type Error = crate::error::Error;
 
-    fn try_from(s: String) -> Result<Self, Self::Error> {
+    fn try_from(s: String) -> std::result::Result<Self, Self::Error> {
         Self::try_from(s.as_str())
     }
 }
 
 impl TryFrom<&String> for StorageClass {
-    type Error = ClientError;
+    type Error = crate::error::Error;
 
-    fn try_from(s: &String) -> Result<Self, Self::Error> {
+    fn try_from(s: &String) -> std::result::Result<Self, Self::Error> {
         Self::try_from(s.as_str())
     }
 }
@@ -242,29 +242,29 @@ impl AsRef<str> for DataRedundancyType {
 }
 
 impl TryFrom<&str> for DataRedundancyType {
-    type Error = ClientError;
+    type Error = crate::error::Error;
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
+    fn try_from(value: &str) -> std::result::Result<Self, Self::Error> {
         match value {
             "LRS" => Ok(DataRedundancyType::LRS),
             "ZRS" => Ok(DataRedundancyType::ZRS),
-            _ => Err(ClientError::Error(format!("Invalid DataRedundancyType value: {}", value))),
+            _ => Err(Error::Other(format!("Invalid DataRedundancyType value: {}", value))),
         }
     }
 }
 
 impl TryFrom<String> for DataRedundancyType {
-    type Error = ClientError;
+    type Error = crate::error::Error;
 
-    fn try_from(value: String) -> Result<Self, Self::Error> {
+    fn try_from(value: String) -> std::result::Result<Self, Self::Error> {
         Self::try_from(value.as_str())
     }
 }
 
 impl TryFrom<&String> for DataRedundancyType {
-    type Error = ClientError;
+    type Error = crate::error::Error;
 
-    fn try_from(value: &String) -> Result<Self, Self::Error> {
+    fn try_from(value: &String) -> std::result::Result<Self, Self::Error> {
         Self::try_from(value.as_str())
     }
 }
@@ -313,29 +313,29 @@ impl Display for OnOff {
 }
 
 impl TryFrom<&str> for OnOff {
-    type Error = ClientError;
+    type Error = crate::error::Error;
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
+    fn try_from(value: &str) -> std::result::Result<Self, Self::Error> {
         match value {
             "Enabled" => Ok(OnOff::Enabled),
             "Disabled" => Ok(OnOff::Disabled),
-            _ => Err(ClientError::Error(format!("Invalid CrossRegionReplication value: {}", value))),
+            _ => Err(Error::Other(format!("Invalid CrossRegionReplication value: {}", value))),
         }
     }
 }
 
 impl TryFrom<String> for OnOff {
-    type Error = ClientError;
+    type Error = crate::error::Error;
 
-    fn try_from(value: String) -> Result<Self, Self::Error> {
+    fn try_from(value: String) -> std::result::Result<Self, Self::Error> {
         Self::try_from(value.as_str())
     }
 }
 
 impl TryFrom<&String> for OnOff {
-    type Error = ClientError;
+    type Error = crate::error::Error;
 
-    fn try_from(value: &String) -> Result<Self, Self::Error> {
+    fn try_from(value: &String) -> std::result::Result<Self, Self::Error> {
         Self::try_from(value.as_str())
     }
 }
@@ -381,29 +381,29 @@ impl Display for Versioning {
 }
 
 impl TryFrom<&str> for Versioning {
-    type Error = ClientError;
+    type Error = crate::error::Error;
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
+    fn try_from(value: &str) -> std::result::Result<Self, Self::Error> {
         match value {
             "Enabled" => Ok(Versioning::Enabled),
             "Disabled" => Ok(Versioning::Suspended),
-            _ => Err(ClientError::Error(format!("Invalid Versioning value: {}", value))),
+            _ => Err(Error::Other(format!("Invalid Versioning value: {}", value))),
         }
     }
 }
 
 impl TryFrom<String> for Versioning {
-    type Error = ClientError;
+    type Error = crate::error::Error;
 
-    fn try_from(value: String) -> Result<Self, Self::Error> {
+    fn try_from(value: String) -> std::result::Result<Self, Self::Error> {
         Self::try_from(value.as_str())
     }
 }
 
 impl TryFrom<&String> for Versioning {
-    type Error = ClientError;
+    type Error = crate::error::Error;
 
-    fn try_from(value: &String) -> Result<Self, Self::Error> {
+    fn try_from(value: &String) -> std::result::Result<Self, Self::Error> {
         Self::try_from(value.as_str())
     }
 }
@@ -445,30 +445,30 @@ impl Display for ServerSideEncryptionAlgorithm {
 }
 
 impl TryFrom<&str> for ServerSideEncryptionAlgorithm {
-    type Error = ClientError;
+    type Error = crate::error::Error;
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
+    fn try_from(value: &str) -> std::result::Result<Self, Self::Error> {
         match value {
             "KMS" => Ok(ServerSideEncryptionAlgorithm::KMS),
             "AES256" => Ok(ServerSideEncryptionAlgorithm::AES256),
             "SM4" => Ok(ServerSideEncryptionAlgorithm::SM4),
-            _ => Err(ClientError::Error(format!("Invalid ServerSideEncryptionAlgorithm value: {}", value))),
+            _ => Err(Error::Other(format!("Invalid ServerSideEncryptionAlgorithm value: {}", value))),
         }
     }
 }
 
 impl TryFrom<String> for ServerSideEncryptionAlgorithm {
-    type Error = ClientError;
+    type Error = crate::error::Error;
 
-    fn try_from(value: String) -> Result<Self, Self::Error> {
+    fn try_from(value: String) -> std::result::Result<Self, Self::Error> {
         Self::try_from(value.as_str())
     }
 }
 
 impl TryFrom<&String> for ServerSideEncryptionAlgorithm {
-    type Error = ClientError;
+    type Error = crate::error::Error;
 
-    fn try_from(value: &String) -> Result<Self, Self::Error> {
+    fn try_from(value: &String) -> std::result::Result<Self, Self::Error> {
         Self::try_from(value.as_str())
     }
 }
@@ -522,31 +522,31 @@ impl AsRef<str> for ObjectType {
 }
 
 impl TryFrom<&str> for ObjectType {
-    type Error = ClientError;
+    type Error = crate::error::Error;
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
+    fn try_from(value: &str) -> std::result::Result<Self, Self::Error> {
         match value {
             "Normal" => Ok(ObjectType::Normal),
             "Multipart" => Ok(ObjectType::Multipart),
             "Appendable" => Ok(ObjectType::Appendable),
             "Symlink" => Ok(ObjectType::Symlink),
-            _ => Err(ClientError::Error(format!("Invalid ObjectType value: {}", value))),
+            _ => Err(Error::Other(format!("Invalid ObjectType value: {}", value))),
         }
     }
 }
 
 impl TryFrom<String> for ObjectType {
-    type Error = ClientError;
+    type Error = crate::error::Error;
 
-    fn try_from(value: String) -> Result<Self, Self::Error> {
+    fn try_from(value: String) -> std::result::Result<Self, Self::Error> {
         Self::try_from(value.as_str())
     }
 }
 
 impl TryFrom<&String> for ObjectType {
-    type Error = ClientError;
+    type Error = crate::error::Error;
 
-    fn try_from(value: &String) -> Result<Self, Self::Error> {
+    fn try_from(value: &String) -> std::result::Result<Self, Self::Error> {
         Self::try_from(value.as_str())
     }
 }
@@ -592,29 +592,29 @@ impl Display for MetadataDirective {
 }
 
 impl TryFrom<&str> for MetadataDirective {
-    type Error = ClientError;
+    type Error = crate::error::Error;
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
+    fn try_from(value: &str) -> std::result::Result<Self, Self::Error> {
         match value {
             "COPY" => Ok(MetadataDirective::Copy),
             "REPLACE" => Ok(MetadataDirective::Replace),
-            _ => Err(ClientError::Error(format!("Invalid MetadataDirective value: {}", value))),
+            _ => Err(Error::Other(format!("Invalid MetadataDirective value: {}", value))),
         }
     }
 }
 
 impl TryFrom<String> for MetadataDirective {
-    type Error = ClientError;
+    type Error = crate::error::Error;
 
-    fn try_from(value: String) -> Result<Self, Self::Error> {
+    fn try_from(value: String) -> std::result::Result<Self, Self::Error> {
         Self::try_from(value.as_str())
     }
 }
 
 impl TryFrom<&String> for MetadataDirective {
-    type Error = ClientError;
+    type Error = crate::error::Error;
 
-    fn try_from(value: &String) -> Result<Self, Self::Error> {
+    fn try_from(value: &String) -> std::result::Result<Self, Self::Error> {
         Self::try_from(value.as_str())
     }
 }
@@ -658,29 +658,29 @@ impl Display for TagDirective {
 }
 
 impl TryFrom<&str> for TagDirective {
-    type Error = ClientError;
+    type Error = crate::error::Error;
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
+    fn try_from(value: &str) -> std::result::Result<Self, Self::Error> {
         match value {
             "Copy" => Ok(TagDirective::Copy),
             "Replace" => Ok(TagDirective::Replace),
-            _ => Err(ClientError::Error(format!("Invalid MetadataDirective value: {}", value))),
+            _ => Err(Error::Other(format!("Invalid MetadataDirective value: {}", value))),
         }
     }
 }
 
 impl TryFrom<String> for TagDirective {
-    type Error = ClientError;
+    type Error = crate::error::Error;
 
-    fn try_from(value: String) -> Result<Self, Self::Error> {
+    fn try_from(value: String) -> std::result::Result<Self, Self::Error> {
         Self::try_from(value.as_str())
     }
 }
 
 impl TryFrom<&String> for TagDirective {
-    type Error = ClientError;
+    type Error = crate::error::Error;
 
-    fn try_from(value: &String) -> Result<Self, Self::Error> {
+    fn try_from(value: &String) -> std::result::Result<Self, Self::Error> {
         Self::try_from(value.as_str())
     }
 }

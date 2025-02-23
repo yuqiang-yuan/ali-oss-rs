@@ -16,7 +16,7 @@ use std::{collections::HashMap, pin::Pin, str::FromStr};
 
 use async_trait::async_trait;
 use bytes::Bytes;
-use error::{ClientError, ClientResult, ErrorResponse};
+use error::{Error, Result, ErrorResponse};
 use futures::Stream;
 use request::RequestBody;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
@@ -118,7 +118,7 @@ impl Client {
     /// So I put them in this method to prevent re-generating
     /// and better debuging output.
     /// And add some default headers to the request builder.
-    pub(crate) async fn do_request<T>(&self, request_builder: crate::request::RequestBuilder) -> ClientResult<(HashMap<String, String>, T)>
+    pub(crate) async fn do_request<T>(&self, request_builder: crate::request::RequestBuilder) -> Result<(HashMap<String, String>, T)>
     where
         T: FromResponse,
     {
@@ -213,15 +213,15 @@ impl Client {
                     log::error!("{}", s);
                     if s.is_empty() {
                         log::error!("call api failed with status: \"{}\". full url: {}", status, full_url);
-                        Err(ClientError::StatusError(status))
+                        Err(Error::StatusError(status))
                     } else {
                         let error_response = ErrorResponse::from_xml(&s)?;
-                        Err(ClientError::ApiError(Box::new(error_response)))
+                        Err(Error::ApiError(Box::new(error_response)))
                     }
                 }
                 Err(_) => {
                     log::error!("call api failed with status: \"{}\". full url: {}", status, full_url);
-                    Err(ClientError::StatusError(status))
+                    Err(Error::StatusError(status))
                 }
             }
         } else {
@@ -232,12 +232,12 @@ impl Client {
 
 #[async_trait]
 pub(crate) trait FromResponse: Sized {
-    async fn from_response(response: reqwest::Response) -> ClientResult<Self>;
+    async fn from_response(response: reqwest::Response) -> Result<Self>;
 }
 
 #[async_trait]
 impl FromResponse for String {
-    async fn from_response(response: reqwest::Response) -> ClientResult<Self> {
+    async fn from_response(response: reqwest::Response) -> Result<Self> {
         let text = response.text().await?;
         Ok(text)
     }
@@ -245,17 +245,17 @@ impl FromResponse for String {
 
 #[async_trait]
 impl FromResponse for () {
-    async fn from_response(_: reqwest::Response) -> ClientResult<Self> {
+    async fn from_response(_: reqwest::Response) -> Result<Self> {
         Ok(())
     }
 }
 
 // Define a type alias for the byte stream
-pub(crate) type ByteStream = Pin<Box<dyn Stream<Item = Result<Bytes, reqwest::Error>> + Send>>;
+pub(crate) type ByteStream = Pin<Box<dyn Stream<Item = std::result::Result<Bytes, reqwest::Error>> + Send>>;
 
 #[async_trait]
 impl FromResponse for ByteStream {
-    async fn from_response(response: reqwest::Response) -> ClientResult<Self> {
+    async fn from_response(response: reqwest::Response) -> Result<Self> {
         // Convert the response body into a byte stream
         let stream = response.bytes_stream();
         Ok(Box::pin(stream))

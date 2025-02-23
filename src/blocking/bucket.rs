@@ -3,7 +3,7 @@ use crate::{
         build_list_buckets_request, build_list_objects_request, build_put_bucket_request, extract_bucket_location, BucketDetail, BucketStat,
         ListBucketsOptions, ListBucketsResult, ListObjectsOptions, ListObjectsResult, PutBucketConfiguration, PutBucketOptions,
     },
-    error::{ClientError, ClientResult},
+    error::{Error, Result},
     request::{RequestBuilder, RequestMethod},
     util::validate_bucket_name,
 };
@@ -11,19 +11,19 @@ use crate::{
 use super::Client;
 
 pub trait BucketOperations {
-    fn put_bucket<S: AsRef<str>>(&self, bucket_name: S, config: PutBucketConfiguration, options: Option<PutBucketOptions>) -> ClientResult<()>;
-    fn list_buckets(&self, options: Option<ListBucketsOptions>) -> ClientResult<ListBucketsResult>;
-    fn get_bucket_info<S: AsRef<str>>(&self, bucket_name: S) -> ClientResult<BucketDetail>;
-    fn get_bucket_location<S: AsRef<str>>(&self, bucket_name: S) -> ClientResult<String>;
-    fn get_bucket_stat<S: AsRef<str>>(&self, bucket_name: S) -> ClientResult<BucketStat>;
-    fn list_objects<S: AsRef<str>>(&self, bucket_name: S, options: Option<ListObjectsOptions>) -> ClientResult<ListObjectsResult>;
-    fn delete_bucket<S: AsRef<str>>(&self, bucket_name: S) -> ClientResult<()>;
+    fn put_bucket<S: AsRef<str>>(&self, bucket_name: S, config: PutBucketConfiguration, options: Option<PutBucketOptions>) -> Result<()>;
+    fn list_buckets(&self, options: Option<ListBucketsOptions>) -> Result<ListBucketsResult>;
+    fn get_bucket_info<S: AsRef<str>>(&self, bucket_name: S) -> Result<BucketDetail>;
+    fn get_bucket_location<S: AsRef<str>>(&self, bucket_name: S) -> Result<String>;
+    fn get_bucket_stat<S: AsRef<str>>(&self, bucket_name: S) -> Result<BucketStat>;
+    fn list_objects<S: AsRef<str>>(&self, bucket_name: S, options: Option<ListObjectsOptions>) -> Result<ListObjectsResult>;
+    fn delete_bucket<S: AsRef<str>>(&self, bucket_name: S) -> Result<()>;
 }
 
 impl BucketOperations for Client {
-    fn put_bucket<S: AsRef<str>>(&self, bucket_name: S, config: PutBucketConfiguration, options: Option<PutBucketOptions>) -> ClientResult<()> {
+    fn put_bucket<S: AsRef<str>>(&self, bucket_name: S, config: PutBucketConfiguration, options: Option<PutBucketOptions>) -> Result<()> {
         if !validate_bucket_name(bucket_name.as_ref()) {
-            return Err(ClientError::Error(format!(
+            return Err(Error::Other(format!(
                 "invalid bucket name: {}. please see the official document for more details",
                 bucket_name.as_ref()
             )));
@@ -36,7 +36,7 @@ impl BucketOperations for Client {
         Ok(())
     }
 
-    fn list_buckets(&self, options: Option<ListBucketsOptions>) -> ClientResult<ListBucketsResult> {
+    fn list_buckets(&self, options: Option<ListBucketsOptions>) -> Result<ListBucketsResult> {
         let request_builder = build_list_buckets_request(&options);
 
         let (_, content) = self.do_request::<String>(request_builder)?;
@@ -44,7 +44,7 @@ impl BucketOperations for Client {
         ListBucketsResult::from_xml(&content)
     }
 
-    fn get_bucket_info<S: AsRef<str>>(&self, bucket_name: S) -> ClientResult<BucketDetail> {
+    fn get_bucket_info<S: AsRef<str>>(&self, bucket_name: S) -> Result<BucketDetail> {
         let request_builder = RequestBuilder::new()
             .method(RequestMethod::Get)
             .bucket(bucket_name.as_ref())
@@ -55,7 +55,7 @@ impl BucketOperations for Client {
         BucketDetail::from_xml(&content)
     }
 
-    fn get_bucket_location<S: AsRef<str>>(&self, bucket_name: S) -> ClientResult<String> {
+    fn get_bucket_location<S: AsRef<str>>(&self, bucket_name: S) -> Result<String> {
         let request_builder = RequestBuilder::new()
             .method(RequestMethod::Get)
             .bucket(bucket_name.as_ref())
@@ -66,7 +66,7 @@ impl BucketOperations for Client {
         extract_bucket_location(content.as_str())
     }
 
-    fn get_bucket_stat<S: AsRef<str>>(&self, bucket_name: S) -> ClientResult<BucketStat> {
+    fn get_bucket_stat<S: AsRef<str>>(&self, bucket_name: S) -> Result<BucketStat> {
         let request_builder = RequestBuilder::new()
             .method(RequestMethod::Get)
             .bucket(bucket_name.as_ref())
@@ -77,7 +77,7 @@ impl BucketOperations for Client {
         BucketStat::from_xml(&content)
     }
 
-    fn list_objects<S: AsRef<str>>(&self, bucket_name: S, options: Option<ListObjectsOptions>) -> ClientResult<ListObjectsResult> {
+    fn list_objects<S: AsRef<str>>(&self, bucket_name: S, options: Option<ListObjectsOptions>) -> Result<ListObjectsResult> {
         let request = build_list_objects_request(bucket_name.as_ref(), &options)?;
 
         let (_, content) = self.do_request::<String>(request)?;
@@ -85,7 +85,7 @@ impl BucketOperations for Client {
         ListObjectsResult::from_xml(&content)
     }
 
-    fn delete_bucket<S: AsRef<str>>(&self, bucket_name: S) -> ClientResult<()> {
+    fn delete_bucket<S: AsRef<str>>(&self, bucket_name: S) -> Result<()> {
         let request_builder = RequestBuilder::new().method(RequestMethod::Delete).bucket(bucket_name.as_ref());
 
         self.do_request::<()>(request_builder)?;

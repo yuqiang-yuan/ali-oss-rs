@@ -5,7 +5,7 @@ use crate::{
         self, AccessMonitor, Acl, CrossRegionReplication, DataRedundancyType, ObjectType, Owner, ServerSideEncryptionAlgorithm, ServerSideEncryptionRule,
         StorageClass, TransferAcceleration, Versioning,
     },
-    error::{ClientError, ClientResult},
+    error::{Error, Result},
     request::{RequestBuilder, RequestMethod},
 };
 
@@ -26,7 +26,7 @@ pub struct BucketSummary {
 }
 
 impl BucketSummary {
-    pub(crate) fn from_xml_reader(reader: &mut quick_xml::Reader<&[u8]>) -> ClientResult<Self> {
+    pub(crate) fn from_xml_reader(reader: &mut quick_xml::Reader<&[u8]>) -> Result<Self> {
         let mut bucket = Self::default();
         let mut current_tag = "".to_string();
 
@@ -105,7 +105,7 @@ pub struct BucketDetail {
 
 impl BucketDetail {
     /// Parse from response XML content
-    pub(crate) fn from_xml(xml: &str) -> ClientResult<Self> {
+    pub(crate) fn from_xml(xml: &str) -> Result<Self> {
         let mut reader = quick_xml::Reader::from_str(xml);
         let mut current_tag = "".to_string();
 
@@ -125,7 +125,7 @@ impl BucketDetail {
         Ok(bucket_detail)
     }
 
-    pub(crate) fn from_xml_reader(reader: &mut quick_xml::Reader<&[u8]>) -> ClientResult<Self> {
+    pub(crate) fn from_xml_reader(reader: &mut quick_xml::Reader<&[u8]>) -> Result<Self> {
         let mut bucket = Self::default();
         let mut current_tag = "".to_string();
 
@@ -229,7 +229,7 @@ pub struct ListBucketsResult {
 }
 
 impl ListBucketsResult {
-    pub(crate) fn from_xml(xml_content: &str) -> ClientResult<Self> {
+    pub(crate) fn from_xml(xml_content: &str) -> Result<Self> {
         let mut reader = quick_xml::Reader::from_str(xml_content);
         reader.config_mut().trim_text(true);
 
@@ -295,7 +295,7 @@ pub struct PutBucketConfiguration {
 }
 
 impl PutBucketConfiguration {
-    pub(crate) fn to_xml(&self) -> ClientResult<String> {
+    pub(crate) fn to_xml(&self) -> Result<String> {
         let mut writer = quick_xml::Writer::new(Vec::new());
         writer.write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), None)))?;
 
@@ -329,7 +329,7 @@ pub struct PutBucketOptions {
 }
 
 /// Extract bucket location from XML response.
-pub(crate) fn extract_bucket_location(xml: &str) -> ClientResult<String> {
+pub(crate) fn extract_bucket_location(xml: &str) -> Result<String> {
     let mut reader = quick_xml::Reader::from_str(xml);
     let mut tag = "".to_string();
     let mut location = "".to_string();
@@ -383,7 +383,7 @@ pub struct BucketStat {
 }
 
 impl BucketStat {
-    pub(crate) fn from_xml(xml: &str) -> ClientResult<Self> {
+    pub(crate) fn from_xml(xml: &str) -> Result<Self> {
         let mut reader = quick_xml::Reader::from_str(xml);
         let mut tag = String::new();
         let mut data = Self::default();
@@ -447,7 +447,7 @@ pub struct ObjectSummary {
 }
 
 impl ObjectSummary {
-    pub(crate) fn from_xml_reader(reader: &mut quick_xml::Reader<&[u8]>) -> ClientResult<Self> {
+    pub(crate) fn from_xml_reader(reader: &mut quick_xml::Reader<&[u8]>) -> Result<Self> {
         let mut tag = String::new();
 
         let mut data = Self::default();
@@ -501,7 +501,7 @@ pub struct ListObjectsResult {
 }
 
 impl ListObjectsResult {
-    pub(crate) fn from_xml(xml: &str) -> ClientResult<Self> {
+    pub(crate) fn from_xml(xml: &str) -> Result<Self> {
         let mut reader = quick_xml::Reader::from_str(xml);
         let mut tag = String::new();
         let mut data = Self::default();
@@ -631,7 +631,7 @@ impl ListObjectsOptionsBuilder {
     }
 }
 
-pub(crate) fn build_put_bucket_request(bucket_name: &str, config: &PutBucketConfiguration, options: &Option<PutBucketOptions>) -> ClientResult<RequestBuilder> {
+pub(crate) fn build_put_bucket_request(bucket_name: &str, config: &PutBucketConfiguration, options: &Option<PutBucketOptions>) -> Result<RequestBuilder> {
     let xml = config.to_xml()?;
 
     let mut request = crate::request::RequestBuilder::new()
@@ -686,7 +686,7 @@ pub(crate) fn build_list_buckets_request(options: &Option<ListBucketsOptions>) -
     request
 }
 
-pub(crate) fn build_list_objects_request(bucket_name: &str, options: &Option<ListObjectsOptions>) -> ClientResult<RequestBuilder> {
+pub(crate) fn build_list_objects_request(bucket_name: &str, options: &Option<ListObjectsOptions>) -> Result<RequestBuilder> {
     let mut request = RequestBuilder::new().method(RequestMethod::Get).bucket(bucket_name).add_query("list-type", "2");
 
     if let Some(options) = options {
@@ -700,7 +700,7 @@ pub(crate) fn build_list_objects_request(bucket_name: &str, options: &Option<Lis
 
         if let Some(u) = options.max_keys {
             if u == 0 || u > 1000 {
-                return Err(ClientError::Error(format!("invalid max-keys: {}. must between 1 and 1000", u)));
+                return Err(Error::Other(format!("invalid max-keys: {}. must between 1 and 1000", u)));
             }
             request = request.add_query("max-keys", u.to_string());
         }

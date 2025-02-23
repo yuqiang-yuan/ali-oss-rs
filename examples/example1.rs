@@ -1,7 +1,7 @@
-use ali_oss_rs::{bucket::BucketOperations, error::ClientResult, Client};
+use ali_oss_rs::{bucket::BucketOperations, error::Result, Client};
 
 #[tokio::main]
-async fn main() -> ClientResult<()> {
+async fn main() -> Result<()> {
     dotenvy::dotenv().unwrap();
 
     let client = Client::from_env();
