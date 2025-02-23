@@ -191,6 +191,10 @@ impl Client {
 
         let req = req_builder.build()?;
 
+        for (k, v) in req.headers() {
+            log::debug!(">> headers: {}: {}", k, v.to_str().unwrap_or_default());
+        }
+
         let response = self.http_client.execute(req).await?;
 
         let mut response_headers = HashMap::new();

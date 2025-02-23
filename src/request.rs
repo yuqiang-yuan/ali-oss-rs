@@ -149,6 +149,23 @@ impl RequestBuilder {
         self
     }
 
+    /// helper method for [`body`]. only the body is set and left `content-length`, `content-type` untouched
+    pub fn text_body(self, text: impl Into<String>) -> Self {
+        self.body(RequestBody::Text(text.into()))
+    }
+
+    #[allow(dead_code)]
+    /// helper method for [`body`]. only the body is set and left `content-length`, `content-type` untouched
+    pub fn bytes_body(self, bytes: impl Into<Vec<u8>>) -> Self {
+        self.body(RequestBody::Bytes(bytes.into()))
+    }
+
+    #[allow(dead_code)]
+    /// helper method for [`body`]. only the body is set and left `content-length`, `content-type` untouched
+    pub fn file_body(self, file_path: impl Into<PathBuf>) -> Self {
+        self.body(RequestBody::File(file_path.into()))
+    }
+
     pub fn content_type(mut self, content_type: &str) -> Self {
         self.headers.insert("content-type".to_string(), content_type.to_string());
         self
@@ -157,20 +174,6 @@ impl RequestBuilder {
     pub fn content_length(mut self, len: u64) -> Self {
         self.headers.insert("content-length".to_string(), len.to_string());
         self
-    }
-
-    pub fn text_body<S: Into<String>>(self, text: S) -> Self {
-        let s = text.into();
-        self.content_length(s.len() as u64).body(RequestBody::Text(s))
-    }
-
-    pub fn bytes_body<B: Into<Vec<u8>>>(self, bytes: B) -> Self {
-        let data = bytes.into();
-        self.content_length(data.len() as u64).body(RequestBody::Bytes(data))
-    }
-
-    pub fn file_body<P: Into<PathBuf>>(self, path: P) -> Self {
-        self.body(RequestBody::File(path.into()))
     }
 
     #[allow(dead_code)]

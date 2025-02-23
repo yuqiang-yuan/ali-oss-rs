@@ -104,6 +104,12 @@ pub enum ClientError {
     StatusError(reqwest::StatusCode),
 
     #[error("{0}")]
+    SerdeJsonError(#[from] serde_json::Error),
+
+    #[error("{0}")]
+    DecodeError(#[from] base64::DecodeError),
+
+    #[error("{0}")]
     Error(String),
 }
 

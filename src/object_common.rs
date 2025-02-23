@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::Path};
+use std::collections::HashMap;
 
 use base64::prelude::{Engine, BASE64_STANDARD};
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
@@ -8,6 +8,7 @@ use crate::{
     error::{ClientError, ClientResult},
     request::{RequestBuilder, RequestMethod},
     util::{sanitize_etag, validate_meta_key, validate_object_key, validate_tag_key, validate_tag_value},
+    RequestBody,
 };
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
@@ -159,6 +160,9 @@ pub struct PutObjectOptions {
     /// Object 标签
     /// 签合法字符集包括大小写字母、数字、空格和下列符号：`+ - = . _ : /`。
     pub tags: HashMap<String, String>,
+
+    /// For `put_object` only.
+    pub callback: Option<Callback>,
 }
 
 pub struct PutObjectOptionsBuilder {
@@ -176,6 +180,7 @@ pub struct PutObjectOptionsBuilder {
     storage_class: Option<StorageClass>,
     metadata: HashMap<String, String>,
     tags: HashMap<String, String>,
+    callback: Option<Callback>,
 }
 
 impl PutObjectOptionsBuilder {
@@ -195,6 +200,7 @@ impl PutObjectOptionsBuilder {
             storage_class: None,
             metadata: HashMap::new(),
             tags: HashMap::new(),
+            callback: None,
         }
     }
 
@@ -268,6 +274,11 @@ impl PutObjectOptionsBuilder {
         self
     }
 
+    pub fn callback(mut self, cb: Callback) -> Self {
+        self.callback = Some(cb);
+        self
+    }
+
     pub fn build(self) -> PutObjectOptions {
         PutObjectOptions {
             mime_type: self.mime_type,
@@ -284,6 +295,7 @@ impl PutObjectOptionsBuilder {
             storage_class: self.storage_class,
             metadata: self.metadata,
             tags: self.tags,
+            callback: self.callback,
         }
     }
 }
@@ -498,18 +510,14 @@ pub struct GetObjectResult;
 pub(crate) fn build_put_object_request(
     bucket_name: &str,
     object_key: &str,
-    file_path: Option<&Path>,
+    request_body: RequestBody,
     options: &Option<PutObjectOptions>,
 ) -> ClientResult<RequestBuilder> {
     if bucket_name.is_empty() || object_key.is_empty() {
         return Err(ClientError::Error("bucket_name and object_key cannot be empty".to_string()));
     }
 
-    // 普通文件的验证规则
-    if file_path.is_some() && !validate_object_key(object_key) {
-        return Err(ClientError::Error(format!("invalid object key: {}", object_key)));
-    }
-
+    // check for metadata and tags
     if let Some(options) = &options {
         for (k, v) in &options.metadata {
             if k.is_empty() || !validate_meta_key(k) || v.is_empty() {
@@ -529,33 +537,36 @@ pub(crate) fn build_put_object_request(
 
     let mut request = RequestBuilder::new().method(RequestMethod::Put).bucket(bucket_name).object(object_key);
 
-    if let Some(file) = file_path {
-        if !file.exists() || !file.is_file() {
-            return Err(ClientError::Error(format!(
-                "{} does not exist or is not a regular file",
-                file.as_os_str().to_str().unwrap_or("UNKNOWN")
-            )));
+    let content_length = match &request_body {
+        RequestBody::Empty => 0u64,
+        RequestBody::Text(s) => s.len() as u64,
+        RequestBody::Bytes(bytes) => bytes.len() as u64,
+        RequestBody::File(file_path) => {
+            if !file_path.exists() || !file_path.is_file() {
+                return Err(ClientError::Error(format!(
+                    "{} does not exist or is not a regular file",
+                    file_path.as_os_str().to_str().unwrap_or("UNKNOWN")
+                )));
+            }
+
+            let file_meta = std::fs::metadata(file_path)?;
+
+            file_meta.len()
         }
+    };
 
-        let file_meta = std::fs::metadata(file)?;
+    request = request.content_length(content_length);
 
-        if file_meta.len() > 5368709120 {
-            return Err(ClientError::Error(format!(
-                "file {} length is larger than 5GB, can not put to oss",
-                file.as_os_str().to_str().unwrap_or("UNKNOWN")
-            )));
-        }
-
-        request = request
-            .content_type(mime_guess::from_path(file).first_or_octet_stream().as_ref())
-            .content_length(file_meta.len())
-            .file_body(file);
-    } else {
-        // creating folder
-        request = request.add_header("content-length", "0");
+    // if no `content-type` specified, try to guess from file
+    if let RequestBody::File(file_path) = &request_body {
+        request = request.content_type(mime_guess::from_path(file_path).first_or_octet_stream().as_ref());
     }
 
+    // move the body to request
+    request = request.body(request_body);
+
     if let Some(options) = options {
+        // if `mime_type` is specified, overwrite it's value which guess from file (maybe)
         if let Some(s) = &options.mime_type {
             request = request.add_header("content-type", s);
         }
@@ -608,6 +619,19 @@ pub(crate) fn build_put_object_request(
 
         if !options.tags.is_empty() {
             request = request.add_header("x-oss-tagging", build_tag_string(&options.tags));
+        }
+
+        if let Some(cb) = &options.callback {
+            // custom variable values are not serialized
+            let callback_json = serde_json::to_string(cb)?;
+            let callback_base64 = BASE64_STANDARD.encode(&callback_json);
+            request = request.add_header("x-oss-callback", callback_base64);
+
+            if !cb.custom_variables.is_empty() {
+                let callback_vars_json = serde_json::to_string(&cb.custom_variables)?;
+                let callback_vars_base64 = BASE64_STANDARD.encode(&callback_vars_json);
+                request = request.add_header("x-oss-callback-var", callback_vars_base64);
+            }
         }
     }
 
@@ -1216,31 +1240,40 @@ pub(crate) fn build_head_object_request(bucket_name: &str, object_key: &str, opt
     request
 }
 
+/// Put object result enumeration
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
-pub struct PutObjectResult {
-    pub content_length: u64,
-    pub request_id: String,
+pub enum PutObjectResult {
+    /// This is response headers from aliyun oss api when you put object with no callback specified
+    #[cfg_attr(feature = "serde_camelcase", serde(rename = "apiResponseHeaders", rename_all = "camelCase"))]
+    ApiResponseHeaders {
+        request_id: String,
 
-    /// 已经移除了首尾双引号（`"`）之后的字符串
-    pub etag: String,
+        /// 已经移除了首尾双引号（`"`）之后的字符串
+        etag: String,
 
-    /// 文件 MD5 值，Base64 编码的字符串
-    pub content_md5: String,
+        /// 文件 MD5 值，Base64 编码的字符串
+        content_md5: String,
 
-    /// 文件 CRC64 值
-    pub hash_crc64ecma: u64,
+        /// 文件 CRC64 值
+        hash_crc64ecma: u64,
 
-    /// 表示文件的版本 ID。仅当您将文件上传至已开启版本控制状态的 Bucket 时，会返回该响应头。
-    pub version_id: Option<String>,
+        /// 表示文件的版本 ID。仅当您将文件上传至已开启版本控制状态的 Bucket 时，会返回该响应头。
+        version_id: Option<String>,
+    },
+
+    /// This is your callback response content string when you put object with callback specified.
+    /// `.0` should be a valid JSON string.
+    #[cfg_attr(feature = "serde_camelcase", serde(rename = "callbackResponseContent"))]
+    CallbackResponseContent(String),
 }
 
+/// If you put object without callback, parse aliyun oss api headers into `PutObjectResult::WithoutCallback` enum variant
 impl From<HashMap<String, String>> for PutObjectResult {
     fn from(mut headers: HashMap<String, String>) -> Self {
-        Self {
-            content_length: headers.remove("content-length").unwrap_or("0".to_string()).parse().unwrap_or(0),
-            request_id: headers.remove("x-oss-server-id").unwrap_or_default(),
+        Self::ApiResponseHeaders {
+            request_id: headers.remove("x-oss-request-id").unwrap_or_default(),
             etag: sanitize_etag(headers.remove("etag").unwrap_or_default()),
             content_md5: headers.remove("content-md5").unwrap_or_default(),
             hash_crc64ecma: headers.remove("x-oss-hash-crc64ecma").unwrap_or("0".to_string()).parse().unwrap_or(0),
@@ -1254,12 +1287,14 @@ pub type AppendObjectOptions = PutObjectOptions;
 pub type AppendObjectOptionsBuilder = PutObjectOptionsBuilder;
 
 pub struct AppendObjectResult {
+    pub request_id: String,
     pub next_append_position: u64,
 }
 
 impl From<HashMap<String, String>> for AppendObjectResult {
     fn from(mut headers: HashMap<String, String>) -> Self {
         Self {
+            request_id: headers.remove("x-oss-request-id").unwrap_or_default(),
             next_append_position: headers.remove("x-oss-next-append-position").unwrap_or("0".to_string()).parse().unwrap_or(0),
         }
     }
@@ -1449,4 +1484,291 @@ where
         .text_body(xml_content);
 
     Ok(request)
+}
+
+/// 发起回调请求的 `Content-Type`
+#[derive(Debug, Copy, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub enum CallbackBodyType {
+    #[default]
+    #[serde(rename = "application/x-www-form-urlencoded")]
+    FormUrlEncoded,
+
+    #[serde(rename = "application/json")]
+    Json,
+}
+
+/// The callback while call
+///
+/// - `put_object_from_file`
+/// - `put_object_from_buffer`
+/// - `put_object_from_base64`
+/// - `complete_multipart_upload`
+///
+/// to create an object, if create object successfully,
+/// the OSS server will call your server according to this callback config with `POST` request method.
+///
+/// Official document: <https://help.aliyun.com/zh/oss/developer-reference/callback>
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct Callback {
+    /// 创建 Object 成功之后，OSS 服务器会 `POST` 到这个 URL。
+    /// 该 URL 调用后的要求有：
+    ///
+    /// - 响应 `HTTP/1.1 200 OK`
+    /// - 响应头 `Content-Length` 必须是合法的值
+    /// - 响应体为 JSON 格式
+    /// - 响应体最大为 3MB
+    ///
+    /// 另外：
+    ///
+    /// - 支持同时配置最多 5 个 URL，多个 URL 间以分号（;）分隔。OSS 会依次发送请求，直到第一个回调请求成功返回。
+    /// - 支持HTTPS协议地址。
+    /// - **不支持**填写 IPV6 地址，也**不支持**填写指向 IPV6 地址的域名。
+    /// - 为了保证正确处理中文等情况，此 URL 需做编码处理，
+    ///   例如 `https://example.com/中文.php?key=value&中文名称=中文值`
+    ///   需要编码为 `https://example.com/%E4%B8%AD%E6%96%87.php?key=value&%E4%B8%AD%E6%96%87%E5%90%8D%E7%A7%B0=%E4%B8%AD%E6%96%87%E5%80%BC`。
+    #[serde(rename = "callbackUrl")]
+    pub url: String,
+
+    /// 发起回调请求时 `Host` 头的值，格式为域名或 IP 地址。仅在设置了 `url` 时有效。
+    /// 如果没有配置 `host`，则解析 `url` 中的 URL，并将解析的 `Host` 填充到 `Host` 请求头中。
+    #[serde(rename = "callbackHost", skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
+
+    /// 发起回调时请求Body的值，例如 `key=${object}&etag=${etag}&my_var=${x:my_var}`。
+    ///
+    /// 支持：
+    ///
+    /// - OSS系统参数，要写成 `${var_name}` 格式
+    ///   - `bucket`
+    ///   - `object`
+    ///   - `etag`
+    ///   - `size`: 以字节为单位的 Object 大小。调用 `complete_multipart_upload` 时，`size` 为整个 Object 的大小
+    ///   - `mimeType`: 资源类型，例如jpeg图片的资源类型为 `image/jpeg`
+    ///   - `imageInfo.height`: 图片高度。该变量仅适用于图片格式，对于非图片格式，该变量的值为空
+    ///   - `imageInfo.width`: 图片宽度。该变量仅适用于图片格式，对于非图片格式，该变量的值为空
+    ///   - `imageInfo.format`: 图片格式，例如JPG、PNG等。该变量仅适用于图片格式，对于非图片格式，该变量的值为空
+    ///   - `crc64`: 与上传文件后返回的 `x-oss-hash-crc64ecma` 头内容一致
+    ///   - `contentMd5`: 与上传文件后返回的 `Content-MD5` 头内容一致。仅在 `put_object_from_xxx` 时候该变量的值不为空
+    ///   - `vpcId`: 发起请求的客户端所在的 VpcId。如果不是通过 VPC 发起请求，则该变量的值为空
+    ///   - `clientIp`: 发起请求的客户端 IP 地址
+    ///   - `reqId`: 发起请求的 RequestId
+    ///   - 发起请求的接口名称，例如 `PutObject`、 `PostObject` 等
+    /// - 自定义参数，其使用格式为 `${x:var_name}`。参数值放到 `custom_variables` 中
+    /// - 常量（字面量）
+    #[serde(rename = "callbackBody")]
+    pub body: String,
+
+    /// 客户端发起回调请求时，OSS是否向地址发送服务器名称指示 SNI（Server Name Indication）。
+    /// 是否发送 SNI 取决于服务器的配置和需求。
+    /// 对于使用同一个 IP 地址来托管多个 TLS/SSL 证书的服务器的情况，建议选择发送 SNI
+    #[serde(rename = "callbackSNI", skip_serializing_if = "Option::is_none")]
+    pub sni: Option<bool>,
+
+    /// 发起回调请求时候的 `Content-Type`。默认是：`application/x-www-form-urlencoded`
+    #[serde(rename = "callbackBodyType", skip_serializing_if = "Option::is_none")]
+    pub body_type: Option<CallbackBodyType>,
+
+    /// 在回调请求体 (`body`) 中携带的数据，如果有自定义参数，请使用此属性容纳自定义参数的值。
+    /// Key 为自定义变量名，但是不包含 `x:` 前缀。在生成 `body` 的时候会自动增加
+    /// 注意：这里我使用了 Map 来接受自定义参数，也就是说，这里**不支持**多个同名的自定义参数来表示集合数据类型
+    #[serde(skip_serializing)]
+    pub custom_variables: HashMap<String, String>,
+}
+
+/// 回调请求数据枚举值
+///
+/// `Oss` 开头的，其中 `.0` 是此参数值对应的参数名。
+/// 因为大部分时候，传入的参数名是固定的，自定参数的 body 参数名和自定义参数的参数值、常量参数值，一般都是静态字符串，
+/// 所以这里用了 `&'a str` 的形态。如果 `&'a str` 不满足你的需求，请使用 `CallbackBodyParameter::Literal(String, String)`
+///
+/// # Example
+///
+/// ```rust
+/// use ali_oss_rs::object_common::CallbackBodyParameter;
+///
+///
+/// assert_eq!("foo=${bucket}", CallbackBodyParameter::OssBucket("foo").to_body_string());
+/// assert_eq!("foo=${x:bar}", CallbackBodyParameter::Custom(
+///     "foo",
+///     "bar",
+///     "Are you OK?".to_string()
+/// ).to_body_string());
+/// assert_eq!("foo=bar", CallbackBodyParameter::Constant("foo", "bar").to_body_string());
+/// assert_eq!(
+///     "foo=${x:bar}",
+///     CallbackBodyParameter::Literal(
+///         "foo".to_string(),
+///         "${x:bar}".to_string()
+///     ).to_body_string()
+/// );
+///
+/// ```
+pub enum CallbackBodyParameter<'a> {
+    OssBucket(&'a str),
+    OssObject(&'a str),
+    OssETag(&'a str),
+    OssSize(&'a str),
+    OssMimeType(&'a str),
+    OssImageHeight(&'a str),
+    OssImageWidth(&'a str),
+    OssImageFormat(&'a str),
+    OssCrc64(&'a str),
+    OssContentMd5(&'a str),
+    OssVpcId(&'a str),
+    OssClientIp(&'a str),
+    OssRequestId(&'a str),
+    OssOperation(&'a str),
+
+    /// - `.0` 是在回调中的参数名，
+    /// - `.1` 是在回调中参数值对应的自定义变量的名字，也就是 `${x:custom_var_name}` 中的 `custom_var_name`。
+    ///   例如：`CallbackBodyParameter::Custom("foo", "bar", "Are you OK?".to_string())`，
+    ///   在请求体中就是 `foo=${x:bar}`
+    /// - `.2` 是在自定义参数表中的自定参数对应的值。例如，上面的例子中，会在 `custom_variables` 中加入一个 `("x:bar", "Are you OK?")` 的条目
+    ///
+    /// 这么设计是为了防止在 body 中增加了自定义参数，但是忘记了传递自定义参数的值
+    Custom(&'a str, &'a str, String),
+
+    /// `.0` 是在回调中的参数名，`.1` 是在回调中的参数值，不做解析，在回调的时候原封不动插入给定的字符。
+    ///
+    /// 例如：`CallbackBodyParameter::Constant("hello", "world")`，
+    /// 在请求体中就是 `hello=world`
+    Constant(&'a str, &'a str),
+
+    /// 这是一个兜底的，如果上面 `&'str` 不满足需求，就使用这个。
+    /// 因为它可以获取所有权。在生成回调请求体的时候，会按照字符串直接拼接。
+    ///
+    /// 例如：`CallbackBodyParameter::Literal("foo".to_string(), "${x:bar}")`，
+    /// 在请求体中就是 `foo=${x:bar}`
+    Literal(String, String),
+}
+
+impl CallbackBodyParameter<'_> {
+    /// 转换成 callback body 中的格式
+    pub fn to_body_string(&self) -> String {
+        match self {
+            CallbackBodyParameter::OssBucket(k) => format!("{}=${{bucket}}", k),
+            CallbackBodyParameter::OssObject(k) => format!("{}=${{object}}", k),
+            CallbackBodyParameter::OssETag(k) => format!("{}=${{etag}}", k),
+            CallbackBodyParameter::OssSize(k) => format!("{}=${{size}}", k),
+            CallbackBodyParameter::OssMimeType(k) => format!("{}=${{mimeType}}", k),
+            CallbackBodyParameter::OssImageHeight(k) => format!("{}=${{imageInfo.height}}", k),
+            CallbackBodyParameter::OssImageWidth(k) => format!("{}=${{imageInfo.width}}", k),
+            CallbackBodyParameter::OssImageFormat(k) => format!("{}=${{imageInfo.format}}", k),
+            CallbackBodyParameter::OssCrc64(k) => format!("{}=${{crc64}}", k),
+            CallbackBodyParameter::OssContentMd5(k) => format!("{}=${{contentMd5}}", k),
+            CallbackBodyParameter::OssVpcId(k) => format!("{}=${{vpcId}}", k),
+            CallbackBodyParameter::OssClientIp(k) => format!("{}=${{clientIp}}", k),
+            CallbackBodyParameter::OssRequestId(k) => format!("{}=${{reqId}}", k),
+            CallbackBodyParameter::OssOperation(k) => format!("{}=${{operation}}", k),
+            CallbackBodyParameter::Custom(k, v, _) => format!("{}=${{x:{}}}", k, v),
+            CallbackBodyParameter::Constant(k, v) => format!("{}={}", k, v),
+            CallbackBodyParameter::Literal(k, v) => format!("{}={}", k, v),
+        }
+    }
+}
+
+/// Callback builder, hope it's helpful when you building your callback
+pub struct CallbackBuilder<'a> {
+    url: String,
+    host: Option<String>,
+    sni: Option<bool>,
+    body_type: Option<CallbackBodyType>,
+    body_parameters: Vec<CallbackBodyParameter<'a>>,
+    custom_variables: HashMap<String, String>,
+}
+
+impl<'a> CallbackBuilder<'a> {
+    pub fn new(url: impl Into<String>) -> Self {
+        Self {
+            url: url.into(),
+            host: None,
+            sni: None,
+            body_type: None,
+            body_parameters: vec![],
+            custom_variables: HashMap::new(),
+        }
+    }
+
+    pub fn host(mut self, host: impl Into<String>) -> Self {
+        self.host = Some(host.into());
+        self
+    }
+
+    pub fn sni(mut self, sni: bool) -> Self {
+        self.sni = Some(sni);
+        self
+    }
+
+    pub fn body_type(mut self, body_type: CallbackBodyType) -> Self {
+        self.body_type = Some(body_type);
+        self
+    }
+
+    pub fn body_parameter(mut self, param: CallbackBodyParameter<'a>) -> Self {
+        if let CallbackBodyParameter::Custom(_, custom_var_name, custom_var_value) = &param {
+            self.custom_variables
+                .insert(format!("x:{}", custom_var_name), custom_var_value.clone());
+        }
+
+        self.body_parameters.push(param);
+        self
+    }
+
+    /// 一般情况下，不需要直接调用这个函数。 `body_parameter` 已经处理了自定义参数的情况了。
+    /// 除非你使用 `CallbackBodyParameter::Literal`，并且涉及到自定义参数的，就需要使用这个函数把自定义参数值加入进来。
+    /// `k` 无需携带 `x:` 前缀，在插入的时候自动追加前缀
+    pub fn custom_variable(mut self, k: impl Into<String>, v: impl Into<String>) -> Self {
+        self.custom_variables.insert(format!("x:{}", k.into()), v.into());
+        self
+    }
+
+    pub fn build(self) -> Callback {
+        let body_string = self.body_parameters.into_iter().map(|bp| bp.to_body_string()).collect::<Vec<_>>().join("&");
+
+        Callback {
+            url: self.url,
+            host: self.host,
+            body: body_string,
+            sni: self.sni,
+            body_type: self.body_type,
+            custom_variables: self.custom_variables,
+        }
+    }
+}
+
+#[cfg(test)]
+mod test_object_common {
+    use crate::object_common::CallbackBodyParameter;
+
+    use super::PutObjectResult;
+
+    #[test]
+    fn test_callback_body_parameter() {
+        assert_eq!("foo=${bucket}", CallbackBodyParameter::OssBucket("foo").to_body_string());
+        assert_eq!(
+            "foo=${x:bar}",
+            CallbackBodyParameter::Custom("foo", "bar", "Are you OK?".to_string()).to_body_string()
+        );
+
+        assert_eq!("foo=bar", CallbackBodyParameter::Constant("foo", "bar").to_body_string());
+        assert_eq!(
+            "foo=${x:bar}",
+            CallbackBodyParameter::Literal("foo".to_string(), "${x:bar}".to_string()).to_body_string()
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "serde")]
+    fn test_put_object_result_serde() {
+        let ret = PutObjectResult::ApiResponseHeaders {
+            request_id: "abc".to_string(),
+            etag: "1232".to_string(),
+            content_md5: "abcsdf".to_string(),
+            hash_crc64ecma: 1232344,
+            version_id: None,
+        };
+
+        let s = serde_json::to_string(&ret).unwrap();
+        println!("{}", s);
+    }
 }

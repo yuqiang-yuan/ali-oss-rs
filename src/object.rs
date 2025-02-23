@@ -16,7 +16,7 @@ use crate::{
     },
     request::{RequestBuilder, RequestMethod},
     util::validate_path,
-    ByteStream, Client,
+    ByteStream, Client, RequestBody,
 };
 
 #[async_trait]
@@ -234,11 +234,17 @@ impl ObjectOperations for Client {
 
         let file_path = file_path.as_ref();
 
-        let request = build_put_object_request(bucket_name, object_key, Some(file_path), &options)?;
+        let with_callback = if let Some(opt) = &options { opt.callback.is_some() } else { false };
 
-        let (headers, _) = self.do_request::<()>(request).await?;
+        let request = build_put_object_request(bucket_name, object_key, RequestBody::File(file_path.to_path_buf()), &options)?;
 
-        Ok(headers.into())
+        let (headers, content) = self.do_request::<String>(request).await?;
+
+        if with_callback {
+            Ok(PutObjectResult::CallbackResponseContent(content))
+        } else {
+            Ok(headers.into())
+        }
     }
 
     /// Create an object from buffer. If you are going to upload a large file, it is recommended to use `upload_file` instead.
@@ -263,13 +269,17 @@ impl ObjectOperations for Client {
         let object_key = object_key.strip_prefix("/").unwrap_or(object_key);
         let object_key = object_key.strip_suffix("/").unwrap_or(object_key);
 
-        let data = buffer.into();
+        let with_callback = if let Some(opt) = &options { opt.callback.is_some() } else { false };
 
-        let request = build_put_object_request(bucket_name, object_key, None, &options)?.bytes_body(data);
+        let request = build_put_object_request(bucket_name, object_key, RequestBody::Bytes(buffer.into()), &options)?;
 
-        let (headers, _) = self.do_request::<()>(request).await?;
+        let (headers, content) = self.do_request::<String>(request).await?;
 
-        Ok(headers.into())
+        if with_callback {
+            Ok(PutObjectResult::CallbackResponseContent(content))
+        } else {
+            Ok(headers.into())
+        }
     }
 
     /// Create an object from base64 string.
@@ -321,7 +331,7 @@ impl ObjectOperations for Client {
 
         let file_path = file_path.as_ref();
 
-        let mut request = build_put_object_request(bucket_name, object_key, Some(file_path), &options)?;
+        let mut request = build_put_object_request(bucket_name, object_key, RequestBody::File(file_path.to_path_buf()), &options)?;
 
         // alter the request method and add append object query parameters
         request = request
@@ -357,14 +367,13 @@ impl ObjectOperations for Client {
         let object_key = object_key.strip_prefix("/").unwrap_or(object_key);
         let object_key = object_key.strip_suffix("/").unwrap_or(object_key);
 
-        let mut request = build_put_object_request(bucket_name, object_key, None, &options)?;
+        let mut request = build_put_object_request(bucket_name, object_key, RequestBody::Bytes(buffer.into()), &options)?;
 
         // alter the request method and add append object query parameters
         request = request
             .method(RequestMethod::Post)
             .add_query("append", "")
-            .add_query("position", position.to_string())
-            .bytes_body(buffer.into());
+            .add_query("position", position.to_string());
 
         let (headers, _) = self.do_request::<()>(request).await?;
 
@@ -468,7 +477,7 @@ impl ObjectOperations for Client {
             format!("{}/", object_key)
         };
 
-        let request = build_put_object_request(bucket_name, &object_key, None, &options)?;
+        let request = build_put_object_request(bucket_name, &object_key, RequestBody::Empty, &options)?;
 
         let (headers, _) = self.do_request::<()>(request).await?;
 
@@ -619,7 +628,10 @@ mod test_object_async {
     use crate::{
         common::{ObjectType, StorageClass},
         object::ObjectOperations,
-        object_common::{DeleteMultipleObjectsConfig, GetObjectOptionsBuilder, PutObjectOptions, PutObjectOptionsBuilder},
+        object_common::{
+            CallbackBodyParameter, CallbackBuilder, DeleteMultipleObjectsConfig, GetObjectOptionsBuilder, PutObjectOptions, PutObjectOptionsBuilder,
+            PutObjectResult,
+        },
         Client,
     };
 
@@ -650,7 +662,17 @@ mod test_object_async {
 
         assert!(result.is_ok());
 
-        log::debug!("{:?}", result.unwrap());
+        let ret = result.unwrap();
+        if let PutObjectResult::ApiResponseHeaders {
+            request_id: _,
+            etag: _,
+            content_md5,
+            hash_crc64ecma: _,
+            version_id: _,
+        } = ret
+        {
+            assert_eq!("u3j3ZJAf4d4uOHz4BNcXiw==", content_md5);
+        }
     }
 
     #[tokio::test]
@@ -682,6 +704,18 @@ mod test_object_async {
         log::debug!("{:?}", result);
 
         assert!(result.is_ok());
+
+        let ret = result.unwrap();
+        if let PutObjectResult::ApiResponseHeaders {
+            request_id: _,
+            etag: _,
+            content_md5,
+            hash_crc64ecma: _,
+            version_id: _,
+        } = ret
+        {
+            assert_eq!("m6YFnp+xXeBIXkiWnqFi9w==", content_md5);
+        }
     }
 
     /// Test upload file with non-default storage class
@@ -703,6 +737,18 @@ mod test_object_async {
         log::debug!("{:?}", result);
 
         assert!(result.is_ok());
+
+        let ret = result.unwrap();
+        if let PutObjectResult::ApiResponseHeaders {
+            request_id: _,
+            etag: _,
+            content_md5,
+            hash_crc64ecma: _,
+            version_id: _,
+        } = ret
+        {
+            assert_eq!("8TAE7tQlHGArvhVzfooeyw==", content_md5);
+        }
     }
 
     #[tokio::test]
@@ -1065,5 +1111,81 @@ mod test_object_async {
         for s in keys {
             assert!(result.items.iter().any(|item| item.key == s));
         }
+    }
+
+    #[tokio::test]
+    async fn test_put_object_from_file_with_callback_async() {
+        setup();
+        let client = Client::from_env();
+
+        let bucket = "yuanyq".to_string();
+        let object = "rust-sdk-test/test-1.webp";
+        let file = "/home/yuanyq/Pictures/test-1.webp".to_string();
+
+        let cb = CallbackBuilder::new("https://your-callback.domain.com/oss-callback-test.php")
+            .body_parameter(CallbackBodyParameter::OssBucket("the_bucket"))
+            .body_parameter(CallbackBodyParameter::OssObject("the_object_key"))
+            .body_parameter(CallbackBodyParameter::OssETag("the_etag"))
+            .body_parameter(CallbackBodyParameter::OssSize("the_size"))
+            .body_parameter(CallbackBodyParameter::OssCrc64("the_crc"))
+            .body_parameter(CallbackBodyParameter::OssClientIp("the_client_ip"))
+            .body_parameter(CallbackBodyParameter::OssContentMd5("the_content_md5"))
+            .body_parameter(CallbackBodyParameter::OssMimeType("the_mime_type"))
+            .body_parameter(CallbackBodyParameter::OssImageWidth("the_image_width"))
+            .body_parameter(CallbackBodyParameter::OssImageHeight("the_image_height"))
+            .body_parameter(CallbackBodyParameter::OssImageFormat("the_image_format"))
+            .body_parameter(CallbackBodyParameter::Custom("my-key", "my-prop", "hello world".to_string()))
+            .body_parameter(CallbackBodyParameter::Constant("my-key-constant", "the-value"))
+            .body_parameter(CallbackBodyParameter::Literal("k1".to_string(), "${x:v1}".to_string()))
+            .custom_variable("v1", "this is value of v1")
+            .build();
+
+        let options = PutObjectOptionsBuilder::new().callback(cb).build();
+
+        let response = client.put_object_from_file(bucket, object, &file, Some(options)).await;
+        assert!(response.is_ok());
+
+        let ret = response.unwrap();
+
+        log::debug!("{:#?}", ret);
+    }
+
+    #[tokio::test]
+    async fn test_put_object_from_buffer_with_callback_async() {
+        setup();
+        let client = Client::from_env();
+
+        let bucket = "yuanyq".to_string();
+        let object = "rust-sdk-test/test-1.webp";
+        let file = "/home/yuanyq/Pictures/test-1.webp".to_string();
+
+        let data = std::fs::read(&file).unwrap();
+
+        let cb = CallbackBuilder::new("https://your-callback.domain.com/oss-callback-test.php")
+            .body_parameter(CallbackBodyParameter::OssBucket("the_bucket"))
+            .body_parameter(CallbackBodyParameter::OssObject("the_object_key"))
+            .body_parameter(CallbackBodyParameter::OssETag("the_etag"))
+            .body_parameter(CallbackBodyParameter::OssSize("the_size"))
+            .body_parameter(CallbackBodyParameter::OssCrc64("the_crc"))
+            .body_parameter(CallbackBodyParameter::OssClientIp("the_client_ip"))
+            .body_parameter(CallbackBodyParameter::OssContentMd5("the_content_md5"))
+            .body_parameter(CallbackBodyParameter::OssMimeType("the_mime_type"))
+            .body_parameter(CallbackBodyParameter::OssImageWidth("the_image_width"))
+            .body_parameter(CallbackBodyParameter::OssImageHeight("the_image_height"))
+            .body_parameter(CallbackBodyParameter::OssImageFormat("the_image_format"))
+            .body_parameter(CallbackBodyParameter::Custom("my-key", "my-prop", "hello world".to_string()))
+            .body_parameter(CallbackBodyParameter::Constant("my-key-constant", "the-value"))
+            .body_parameter(CallbackBodyParameter::Literal("k1".to_string(), "${x:v1}".to_string()))
+            .custom_variable("v1", "this is value of v1")
+            .build();
+
+        let options = PutObjectOptionsBuilder::new().callback(cb).build();
+
+        let response = client.put_object_from_buffer(bucket, object, data, Some(options)).await;
+        assert!(response.is_ok());
+
+        let ret = response.unwrap();
+
+        log::debug!("{:#?}", ret);
     }
 }

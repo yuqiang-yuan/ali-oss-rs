@@ -13,6 +13,7 @@ use crate::{
     },
     request::{RequestBuilder, RequestMethod},
     util::validate_path,
+    RequestBody,
 };
 
 use super::{BytesBody, Client};
@@ -202,11 +203,17 @@ impl ObjectOperations for Client {
 
         let file_path = file_path.as_ref();
 
-        let request = build_put_object_request(bucket_name, object_key, Some(file_path), &options)?;
+        let with_callback = if let Some(opt) = &options { opt.callback.is_some() } else { false };
 
-        let (headers, _) = self.do_request::<()>(request)?;
+        let request = build_put_object_request(bucket_name, object_key, RequestBody::File(file_path.to_path_buf()), &options)?;
 
-        Ok(headers.into())
+        let (headers, content) = self.do_request::<String>(request)?;
+
+        if with_callback {
+            Ok(PutObjectResult::CallbackResponseContent(content))
+        } else {
+            Ok(headers.into())
+        }
     }
 
     /// Create an object from buffer. If you are going to upload a large file, it is recommended to use `upload_file` instead.
@@ -225,19 +232,17 @@ impl ObjectOperations for Client {
         let object_key = object_key.strip_prefix("/").unwrap_or(object_key);
         let object_key = object_key.strip_suffix("/").unwrap_or(object_key);
 
-        let data = buffer.into();
+        let with_callback = if let Some(opt) = &options { opt.callback.is_some() } else { false };
 
-        let mut request = build_put_object_request(bucket_name, object_key, None, &options)?.bytes_body(data);
+        let request = build_put_object_request(bucket_name, object_key, RequestBody::Bytes(buffer.into()), &options)?;
 
-        if let Some(options) = options {
-            if let Some(s) = &options.mime_type {
-                request = request.add_header("content-type", s);
-            }
+        let (headers, content) = self.do_request::<String>(request)?;
+
+        if with_callback {
+            Ok(PutObjectResult::CallbackResponseContent(content))
+        } else {
+            Ok(headers.into())
         }
-
-        let (headers, _) = self.do_request::<()>(request)?;
-
-        Ok(headers.into())
     }
 
     /// Create an object from base64 string.
@@ -289,7 +294,7 @@ impl ObjectOperations for Client {
 
         let file_path = file_path.as_ref();
 
-        let mut request = build_put_object_request(bucket_name, object_key, Some(file_path), &options)?;
+        let mut request = build_put_object_request(bucket_name, object_key, RequestBody::File(file_path.to_path_buf()), &options)?;
 
         // alter the request method and add append object query parameters
         request = request
@@ -325,14 +330,13 @@ impl ObjectOperations for Client {
         let object_key = object_key.strip_prefix("/").unwrap_or(object_key);
         let object_key = object_key.strip_suffix("/").unwrap_or(object_key);
 
-        let mut request = build_put_object_request(bucket_name, object_key, None, &options)?;
+        let mut request = build_put_object_request(bucket_name, object_key, RequestBody::Bytes(buffer.into()), &options)?;
 
         // alter the request method and add append object query parameters
         request = request
             .method(RequestMethod::Post)
             .add_query("append", "")
-            .add_query("position", position.to_string())
-            .bytes_body(buffer.into());
+            .add_query("position", position.to_string());
 
         let (headers, _) = self.do_request::<()>(request)?;
 
@@ -421,7 +425,7 @@ impl ObjectOperations for Client {
             format!("{}/", object_key)
         };
 
-        let request = build_put_object_request(bucket_name, &object_key, None, &options)?;
+        let request = build_put_object_request(bucket_name, &object_key, RequestBody::Empty, &options)?;
 
         let (headers, _) = self.do_request::<()>(request)?;
 
