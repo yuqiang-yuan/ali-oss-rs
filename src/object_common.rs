@@ -555,6 +555,11 @@ pub(crate) fn build_put_object_request(
         }
     };
 
+    // max file size for putting object is 5GB
+    if content_length > 5_368_709_120 {
+        return Err(ClientError::Error(format!("length {} exceeds limitation. max allowed is 5GB", content_length)));
+    }
+
     request = request.content_length(content_length);
 
     // if no `content-type` specified, try to guess from file
@@ -1521,7 +1526,7 @@ pub struct Callback {
     /// 另外：
     ///
     /// - 支持同时配置最多 5 个 URL，多个 URL 间以分号（;）分隔。OSS 会依次发送请求，直到第一个回调请求成功返回。
-    /// - 支持HTTPS协议地址。
+    /// - 支持 HTTPS 协议地址。
     /// - **不支持**填写 IPV6 地址，也**不支持**填写指向 IPV6 地址的域名。
     /// - 为了保证正确处理中文等情况，此 URL 需做编码处理，
     ///   例如 `https://example.com/中文.php?key=value&中文名称=中文值`
@@ -1539,14 +1544,14 @@ pub struct Callback {
     /// 支持：
     ///
     /// - OSS系统参数，要写成 `${var_name}` 格式
-    ///   - `bucket`
-    ///   - `object`
-    ///   - `etag`
+    ///   - `bucket`: The bucket name
+    ///   - `object`: The object key
+    ///   - `etag`: The ETag of the object
     ///   - `size`: 以字节为单位的 Object 大小。调用 `complete_multipart_upload` 时，`size` 为整个 Object 的大小
-    ///   - `mimeType`: 资源类型，例如jpeg图片的资源类型为 `image/jpeg`
+    ///   - `mimeType`: 资源类型，例如 jpeg 图片的资源类型为 `image/jpeg`
     ///   - `imageInfo.height`: 图片高度。该变量仅适用于图片格式，对于非图片格式，该变量的值为空
     ///   - `imageInfo.width`: 图片宽度。该变量仅适用于图片格式，对于非图片格式，该变量的值为空
-    ///   - `imageInfo.format`: 图片格式，例如JPG、PNG等。该变量仅适用于图片格式，对于非图片格式，该变量的值为空
+    ///   - `imageInfo.format`: 图片格式，例如 JPG、PNG 等。该变量仅适用于图片格式，对于非图片格式，该变量的值为空
     ///   - `crc64`: 与上传文件后返回的 `x-oss-hash-crc64ecma` 头内容一致
     ///   - `contentMd5`: 与上传文件后返回的 `Content-MD5` 头内容一致。仅在 `put_object_from_xxx` 时候该变量的值不为空
     ///   - `vpcId`: 发起请求的客户端所在的 VpcId。如果不是通过 VPC 发起请求，则该变量的值为空
@@ -1707,7 +1712,7 @@ impl<'a> CallbackBuilder<'a> {
     pub fn body_parameter(mut self, param: CallbackBodyParameter<'a>) -> Self {
         if let CallbackBodyParameter::Custom(_, custom_var_name, custom_var_value) = &param {
             self.custom_variables
-                .insert(format!("x:{}", custom_var_name), custom_var_value.clone());
+                .insert(format!("x:{}", custom_var_name.strip_prefix("x:").unwrap_or(custom_var_name)), custom_var_value.clone());
         }
 
         self.body_parameters.push(param);
@@ -1718,7 +1723,8 @@ impl<'a> CallbackBuilder<'a> {
     /// 除非你使用 `CallbackBodyParameter::Literal`，并且涉及到自定义参数的，就需要使用这个函数把自定义参数值加入进来。
     /// `k` 无需携带 `x:` 前缀，在插入的时候自动追加前缀
     pub fn custom_variable(mut self, k: impl Into<String>, v: impl Into<String>) -> Self {
-        self.custom_variables.insert(format!("x:{}", k.into()), v.into());
+        let key: String = k.into();
+        self.custom_variables.insert(format!("x:{}", key.strip_prefix("x:").unwrap_or(key.as_str())), v.into());
         self
     }
 
@@ -1734,6 +1740,91 @@ impl<'a> CallbackBuilder<'a> {
             custom_variables: self.custom_variables,
         }
     }
+}
+
+/// Job parameters tier for restoring object
+///
+/// 冷归档、深度冷归档类型 Object 解冻优先级。取值范围如下：
+///
+/// - 冷归档类型 Object
+///   - 高优先级（Expedited）：表示 1 小时内完成解冻。
+///   - 标准（Standard，默认值）：表示 2~5 小时内完成解冻。
+///   - 批量（Bulk）：表示 5~12 小时内完成解冻。
+/// - 深度冷归档类型 Object
+///   - 高优先级（Expedited）：表示 12 小时内完成解冻。
+///   - 标准（Standard，默认值）：表示48小时内完成解冻。
+#[derive(Debug, Copy, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum RestoreJobTier {
+    #[cfg_attr(feature = "serde", serde(rename = "Standard"))]
+    #[default]
+    Standard,
+
+    #[cfg_attr(feature = "serde", serde(rename = "Expedited"))]
+    Expedited,
+
+    #[cfg_attr(feature = "serde", serde(rename = "Bulk"))]
+    Bulk,
+}
+
+impl RestoreJobTier {
+    pub fn as_str(&self) -> &str {
+        match self {
+            RestoreJobTier::Standard => "Standard",
+            RestoreJobTier::Expedited => "Expedited",
+            RestoreJobTier::Bulk => "Bulk",
+        }
+    }
+}
+
+impl AsRef<str> for RestoreJobTier {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl TryFrom<&str> for RestoreJobTier {
+    type Error = ClientError;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        match s {
+            "Standard" => Ok(Self::Standard),
+            "Expedited" => Ok(Self::Expedited),
+            "Bulk" => Ok(Self::Bulk),
+            _ => Err(ClientError::Error(format!("invalid job tier: {}", s)))
+        }
+    }
+}
+
+impl TryFrom<&String> for RestoreJobTier {
+    type Error = ClientError;
+
+    fn try_from(s: &String) -> Result<Self, Self::Error> {
+        Self::try_from(s.as_str())
+    }
+}
+
+impl TryFrom<String> for RestoreJobTier {
+    type Error = ClientError;
+
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        Self::try_from(s.as_str())
+    }
+}
+
+/// Restore object request
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+pub struct RestoreObjectRequest {
+    /// 设置归档、冷归档以及深度冷归档类型 Object 的解冻天数。
+    ///
+    /// - 归档类型 Object 解冻天数的取值范围为 1~7，单位为天
+    /// - 冷归档以及深度冷归档类型 Object 解冻天数的取值范围为 1~365，单位为天。
+    pub days: u16,
+
+    /// 冷归档、深度冷归档类型Object解冻优先级. 参见 [`RestoreJobTier`]
+    pub tier: Option<RestoreJobTier>,
 }
 
 #[cfg(test)]

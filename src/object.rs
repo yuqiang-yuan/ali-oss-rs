@@ -528,7 +528,7 @@ impl ObjectOperations for Client {
         }
     }
 
-    /// Get object metadata which is more detail than [`get_object_metadata`]
+    /// Get more detail object metadata
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/headobject>
     async fn head_object<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<HeadObjectOptions>) -> ClientResult<ObjectMetadata>
