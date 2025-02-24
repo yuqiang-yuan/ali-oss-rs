@@ -5,6 +5,8 @@ pub mod common;
 pub mod error;
 pub mod object;
 pub mod object_common;
+pub mod presign;
+pub mod presign_common;
 pub mod request;
 
 #[cfg(feature = "blocking")]
@@ -33,7 +35,7 @@ pub struct Client {
     pub region: String,
     pub endpoint: String,
     pub scheme: String,
-
+    pub sts_token: Option<String>,
     http_client: reqwest::Client,
 }
 
@@ -98,6 +100,7 @@ impl Client {
             access_key_secret: access_key_secret.as_ref().to_string(),
             region: region.as_ref().to_string(),
             endpoint: lc_endpoint,
+            sts_token: None,
             scheme,
             http_client: reqwest::Client::new(),
         }
@@ -118,10 +121,14 @@ impl Client {
     /// So I put them in this method to prevent re-generating
     /// and better debuging output.
     /// And add some default headers to the request builder.
-    pub(crate) async fn do_request<T>(&self, request_builder: crate::request::RequestBuilder) -> Result<(HashMap<String, String>, T)>
+    pub(crate) async fn do_request<T>(&self, mut request_builder: crate::request::RequestBuilder) -> Result<(HashMap<String, String>, T)>
     where
         T: FromResponse,
     {
+        if let Some(s) = &self.sts_token {
+            request_builder.headers_mut().insert("x-oss-security-token".to_string(), s.to_string());
+        }
+
         let date_time_string = request_builder.headers.get("x-oss-date").unwrap();
         let date_string = &date_time_string[..8];
 

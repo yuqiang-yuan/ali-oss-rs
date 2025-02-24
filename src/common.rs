@@ -7,6 +7,9 @@ use crate::error::{Error, Result};
 
 pub const MIME_TYPE_XML: &str = "application/xml";
 pub const DELETE_MULTIPLE_OBJECTS_LIMIT: usize = 1000;
+pub const SIGNATURE_VERSION: &str = "OSS4-HMAC-SHA256";
+pub const UNSIGNED_PAYLOAD: &str = "UNSIGNED-PAYLOAD";
+
 
 #[derive(Debug, Clone, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

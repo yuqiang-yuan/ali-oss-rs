@@ -267,8 +267,9 @@ impl RequestBuilder {
     ///   - `Content-MD5`
     ///   - `x-oss-*`
     pub(crate) fn build_canonical_headers(&self) -> String {
+        // If no header are set, just return empty string without line break
         if self.headers.is_empty() {
-            return "\n".to_string();
+            return "".to_string();
         }
 
         let mut pairs = self
@@ -283,6 +284,16 @@ impl RequestBuilder {
         let s = pairs.iter().map(|(k, v)| format!("{}:{}", k, v.trim())).collect::<Vec<_>>().join("\n");
 
         // 不知道为什么这里要多一个空行
+        // 参考 Java SDK 的代码：
+        //   // Canonical Headers + "\n" +
+        //   orderMap = buildSortedHeadersMap(request.getHeaders());
+        //   canonicalPart = new StringBuilder();
+        //   for (Map.Entry<String, String> param : orderMap.entrySet()) {
+        //       canonicalPart.append(param.getKey()).append(":").append(param.getValue().trim()).append(SignParameters.NEW_LINE);
+        //   }
+        //   canonicalString.append(canonicalPart).append(SignParameters.NEW_LINE);
+        //
+        // 看起来是每对儿 header k:v 后面都跟了一个换行符，我们这里使用 `join` 的话，实际上缺少一个换行符，所以在最后返回的时候不冲上去
         format!("{}\n", s)
     }
 

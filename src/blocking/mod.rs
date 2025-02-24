@@ -10,6 +10,7 @@ use crate::{
 
 pub mod bucket;
 pub mod object;
+pub mod presign;
 
 pub struct Client {
     access_key_id: String,
@@ -17,6 +18,7 @@ pub struct Client {
     pub region: String,
     pub endpoint: String,
     pub scheme: String,
+    pub sts_token: Option<String>,
     blocking_http_client: reqwest::blocking::Client,
 }
 
@@ -82,6 +84,7 @@ impl Client {
             region: region.as_ref().to_string(),
             endpoint: lc_endpoint,
             scheme,
+            sts_token: None,
             blocking_http_client: reqwest::blocking::Client::new(),
         }
     }
