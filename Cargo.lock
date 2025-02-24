@@ -51,6 +51,7 @@ dependencies = [
  "simple_logger",
  "thiserror",
  "tokio",
+ "tokio-util",
  "url",
  "urlencoding",
 ]

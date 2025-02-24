@@ -1,4 +1,10 @@
-use std::{collections::HashMap, fs::File, path::Path, str::FromStr};
+use std::{
+    collections::HashMap,
+    fs::File,
+    io::{Read, Seek},
+    path::Path,
+    str::FromStr,
+};
 
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use url::Url;
@@ -286,9 +292,16 @@ impl Client {
             RequestBody::Empty => req_builder,
             RequestBody::Text(text) => req_builder.body(text),
             RequestBody::Bytes(bytes) => req_builder.body(bytes),
-            RequestBody::File(path) => {
-                let file = File::open(path)?;
-                req_builder.body(file)
+            RequestBody::File(path, range) => {
+                if let Some(range) = range {
+                    let mut file = std::fs::File::open(path)?;
+                    file.seek(std::io::SeekFrom::Start(range.start))?;
+                    let limited_reader = file.take(range.end - range.start);
+                    req_builder.body(reqwest::blocking::Body::new(limited_reader))
+                } else {
+                    let file = File::open(path)?;
+                    req_builder.body(file)
+                }
             }
         };
 

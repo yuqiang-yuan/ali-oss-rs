@@ -230,7 +230,7 @@ impl ObjectOperations for Client {
 
         let with_callback = if let Some(opt) = &options { opt.callback.is_some() } else { false };
 
-        let request = build_put_object_request(bucket_name, object_key, RequestBody::File(file_path.to_path_buf()), &options)?;
+        let request = build_put_object_request(bucket_name, object_key, RequestBody::File(file_path.to_path_buf(), None), &options)?;
 
         let (headers, content) = self.do_request::<String>(request).await?;
 
@@ -319,7 +319,7 @@ impl ObjectOperations for Client {
 
         let file_path = file_path.as_ref();
 
-        let mut request = build_put_object_request(bucket_name, object_key, RequestBody::File(file_path.to_path_buf()), &options)?;
+        let mut request = build_put_object_request(bucket_name, object_key, RequestBody::File(file_path.to_path_buf(), None), &options)?;
 
         // alter the request method and add append object query parameters
         request = request

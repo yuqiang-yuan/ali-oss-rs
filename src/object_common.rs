@@ -541,17 +541,21 @@ pub(crate) fn build_put_object_request(
         RequestBody::Empty => 0u64,
         RequestBody::Text(s) => s.len() as u64,
         RequestBody::Bytes(bytes) => bytes.len() as u64,
-        RequestBody::File(file_path) => {
-            if !file_path.exists() || !file_path.is_file() {
-                return Err(Error::Other(format!(
-                    "{} does not exist or is not a regular file",
-                    file_path.as_os_str().to_str().unwrap_or("UNKNOWN")
-                )));
+        RequestBody::File(file_path, range) => {
+            if let Some(r) = range {
+                r.end - r.start
+            } else {
+                if !file_path.exists() || !file_path.is_file() {
+                    return Err(Error::Other(format!(
+                        "{} does not exist or is not a regular file",
+                        file_path.as_os_str().to_str().unwrap_or("UNKNOWN")
+                    )));
+                }
+
+                let file_meta = std::fs::metadata(file_path)?;
+
+                file_meta.len()
             }
-
-            let file_meta = std::fs::metadata(file_path)?;
-
-            file_meta.len()
         }
     };
 
@@ -563,7 +567,7 @@ pub(crate) fn build_put_object_request(
     request = request.content_length(content_length);
 
     // if no `content-type` specified, try to guess from file
-    if let RequestBody::File(file_path) = &request_body {
+    if let RequestBody::File(file_path, _) = &request_body {
         request = request.content_type(mime_guess::from_path(file_path).first_or_octet_stream().as_ref());
     }
 

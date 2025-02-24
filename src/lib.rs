@@ -3,6 +3,8 @@ pub mod bucket;
 pub mod bucket_common;
 pub mod common;
 pub mod error;
+pub mod multipart;
+pub mod multipart_common;
 pub mod object;
 pub mod object_common;
 pub mod presign;
@@ -19,13 +21,18 @@ use std::{collections::HashMap, pin::Pin, str::FromStr};
 use async_trait::async_trait;
 use bytes::Bytes;
 use error::{Error, ErrorResponse, Result};
-use futures::Stream;
+use futures::{Stream, StreamExt};
 use request::RequestBody;
-use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
+use reqwest::{
+    header::{HeaderMap, HeaderName, HeaderValue},
+    Body,
+};
 
 pub use serde;
 pub use serde_json;
 
+use tokio::io::{AsyncReadExt, AsyncSeekExt};
+use tokio_util::codec::{BytesCodec, FramedRead};
 use url::Url;
 use util::{get_region_from_endpoint, hmac_sha256};
 
@@ -309,7 +316,18 @@ impl Client {
             RequestBody::Empty => req_builder,
             RequestBody::Text(text) => req_builder.body(text),
             RequestBody::Bytes(bytes) => req_builder.body(bytes),
-            RequestBody::File(path) => req_builder.body(tokio::fs::File::open(path).await?),
+            RequestBody::File(path, range) => {
+                if let Some(rng) = range {
+                    let mut file = tokio::fs::File::open(path).await?;
+                    file.seek(tokio::io::SeekFrom::Start(rng.start)).await?;
+                    let limited_reader = file.take(rng.end - rng.start);
+                    // Create a stream from the limited reader
+                    let stream = FramedRead::new(limited_reader, BytesCodec::new()).map(|r| r.map(|bytes| bytes.freeze()));
+                    req_builder.body(Body::wrap_stream(stream))
+                } else {
+                    req_builder.body(tokio::fs::File::open(path).await?)
+                }
+            }
         };
 
         let req = req_builder.build()?;

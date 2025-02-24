@@ -1,6 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     fmt::Display,
+    ops::Range,
     path::PathBuf,
 };
 
@@ -13,7 +14,7 @@ pub(crate) enum RequestBody {
     Empty,
     Text(String),
     Bytes(Vec<u8>),
-    File(PathBuf),
+    File(PathBuf, Option<Range<u64>>),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -163,7 +164,7 @@ impl RequestBuilder {
     #[allow(dead_code)]
     /// helper method for [`body`]. only the body is set and left `content-length`, `content-type` untouched
     pub fn file_body(self, file_path: impl Into<PathBuf>) -> Self {
-        self.body(RequestBody::File(file_path.into()))
+        self.body(RequestBody::File(file_path.into(), None))
     }
 
     pub fn content_type(mut self, content_type: &str) -> Self {
