@@ -5,20 +5,130 @@ use url::Url;
 
 use crate::{
     error::{Error, ErrorResponse, Result},
-    hmac_sha256, util, RequestBody,
+    get_region_from_endpoint, hmac_sha256, util, RequestBody,
 };
 
 pub mod bucket;
 pub mod object;
 pub mod presign;
 
+/// Builder for `Client`.
+#[derive(Debug, Default)]
+pub struct ClientBuilder {
+    access_key_id: String,
+    access_key_secret: String,
+    endpoint: String,
+    region: Option<String>,
+    scheme: Option<String>,
+    sts_token: Option<String>,
+    client: Option<reqwest::blocking::Client>,
+}
+
+impl ClientBuilder {
+    /// `endpoint` could be: `oss-cn-hangzhou.aliyuncs.com` without scheme part.
+    /// or you can include scheme part in the `endpoint`: `https://oss-cn-hangzhou.aliyuncs.com`.
+    /// if no scheme specified, use `https` by default.
+    pub fn new<S1, S2, S3>(access_key_id: S1, access_key_secret: S2, endpoint: S3) -> Self
+    where
+        S1: AsRef<str>,
+        S2: AsRef<str>,
+        S3: AsRef<str>,
+    {
+        Self {
+            access_key_id: access_key_id.as_ref().to_string(),
+            access_key_secret: access_key_secret.as_ref().to_string(),
+            endpoint: endpoint.as_ref().to_string(),
+            ..Default::default()
+        }
+    }
+
+    /// Set region id explicitly. e.g. `cn-beijing`, `cn-hangzhou`.
+    /// **CAUTION** no `oss-` prefix for region.
+    /// If no region is set, I will be guessed from `endpoint`.
+    pub fn region(mut self, region: impl Into<String>) -> Self {
+        self.region = Some(region.into());
+        self
+    }
+
+    /// Set scheme. should be: `https` or `http`.
+    pub fn scheme(mut self, scheme: impl Into<String>) -> Self {
+        self.scheme = Some(scheme.into());
+        self
+    }
+
+    /// For sts token mode.
+    pub fn sts_token(mut self, sts_token: impl Into<String>) -> Self {
+        self.sts_token = Some(sts_token.into());
+        self
+    }
+
+    /// You can build your own `reqwest::Client` and set to the OSS client.
+    /// I do not expose each option of `reqwest::Client` because there are many options to build a `reqwest::Client`.
+    pub fn client(mut self, client: reqwest::blocking::Client) -> Self {
+        self.client = Some(client);
+        self
+    }
+
+    /// Build the client.
+    ///
+    /// ## Error:
+    ///
+    /// If `region` is not set and can not guessed from `endpoint`, returns error.
+    pub fn build(self) -> std::result::Result<crate::blocking::Client, String> {
+        let ClientBuilder {
+            access_key_id,
+            access_key_secret,
+            endpoint,
+            region,
+            scheme,
+            sts_token,
+            client,
+        } = self;
+
+        let scheme = if let Some(s) = scheme {
+            s
+        } else if endpoint.starts_with("http://") {
+            "http".to_string()
+        } else {
+            "https".to_string()
+        };
+
+        let lc_endpoint = endpoint.as_str();
+        // remove the scheme part from the endpoint if there was one
+        let lc_endpoint = if let Some(s) = lc_endpoint.strip_prefix("http://") {
+            s.to_string()
+        } else {
+            lc_endpoint.to_string()
+        };
+
+        let lc_endpoint = if let Some(s) = lc_endpoint.strip_prefix("https://") {
+            s.to_string()
+        } else {
+            lc_endpoint.to_string()
+        };
+
+        let region = if let Some(r) = region { r } else { get_region_from_endpoint(&lc_endpoint)? };
+
+        Ok(Client {
+            access_key_id,
+            access_key_secret,
+            endpoint,
+            region,
+            scheme,
+            sts_token,
+            blocking_http_client: if let Some(c) = client { c } else { reqwest::blocking::Client::new() },
+        })
+    }
+}
+
+/// An synchronous OSS client which requesting aliyun OSS api in blocking mode.
 pub struct Client {
     access_key_id: String,
     access_key_secret: String,
-    pub region: String,
-    pub endpoint: String,
-    pub scheme: String,
-    pub sts_token: Option<String>,
+    region: String,
+    endpoint: String,
+    scheme: String,
+    sts_token: Option<String>,
     blocking_http_client: reqwest::blocking::Client,
 }
 
@@ -104,10 +214,14 @@ impl Client {
     /// So I put them in this method to prevent re-generating
     /// and better debuging output.
     /// And add some default headers to the request builder.
-    pub(crate) fn do_request<T>(&self, request_builder: crate::request::RequestBuilder) -> Result<(HashMap<String, String>, T)>
+    fn do_request<T>(&self, mut request_builder: crate::request::RequestBuilder) -> Result<(HashMap<String, String>, T)>
     where
         T: FromResponse,
     {
+        if let Some(s) = &self.sts_token {
+            request_builder.headers_mut().insert("x-oss-security-token".to_string(), s.to_string());
+        }
+
         let date_time_string = request_builder.headers.get("x-oss-date").unwrap();
         let date_string = &date_time_string[..8];
 

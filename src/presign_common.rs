@@ -2,7 +2,11 @@
 
 use std::collections::HashMap;
 
-use crate::{common, request::{RequestBuilder, RequestMethod}, util};
+use crate::{
+    common,
+    request::{RequestBuilder, RequestMethod},
+    util,
+};
 
 /// Presign options for GET
 #[derive(Debug, Clone, Default)]

@@ -10,7 +10,6 @@ pub const DELETE_MULTIPLE_OBJECTS_LIMIT: usize = 1000;
 pub const SIGNATURE_VERSION: &str = "OSS4-HMAC-SHA256";
 pub const UNSIGNED_PAYLOAD: &str = "UNSIGNED-PAYLOAD";
 
-
 #[derive(Debug, Clone, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]

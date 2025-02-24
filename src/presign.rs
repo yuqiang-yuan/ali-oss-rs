@@ -1,11 +1,12 @@
 //! Trait and implementation for pre-signing URL for OSS object
 
-
-use crate::{presign_common::{build_presign_get_request, PresignGetOptions}, util, Client};
+use crate::{
+    presign_common::{build_presign_get_request, PresignGetOptions},
+    util, Client,
+};
 
 /// Operations for presign request
 pub trait PresignOperations {
-
     /// Presign URL for GET request without any additional headers supported, for brower mostly
     fn presign_url<S1, S2>(&self, bucket_name: S1, object_key: S2, options: PresignGetOptions) -> String
     where
@@ -18,7 +19,7 @@ impl PresignOperations for Client {
     fn presign_url<S1, S2>(&self, bucket_name: S1, object_key: S2, options: PresignGetOptions) -> String
     where
         S1: AsRef<str>,
-        S2: AsRef<str>
+        S2: AsRef<str>,
     {
         let mut request = build_presign_get_request(bucket_name.as_ref(), object_key.as_ref(), &options);
 
@@ -29,7 +30,7 @@ impl PresignOperations for Client {
         // log::debug!("credential = {}", credential);
         request = request.add_query("x-oss-credential", &credential);
 
-        if let Some(s) =  &self.sts_token {
+        if let Some(s) = &self.sts_token {
             request = request.add_query("x-oss-security-token", s);
         }
 
@@ -61,16 +62,11 @@ impl PresignOperations for Client {
             format!("{}://{}.{}{}", self.scheme, request.bucket_name, self.endpoint, uri)
         };
 
-        let full_url = if query_string.is_empty() {
+        if query_string.is_empty() {
             domain_name
         } else {
             format!("{}?{}", domain_name, query_string)
-        };
-
-        // log::debug!("full url: {}", full_url);
-
-        full_url
-
+        }
     }
 }
 
@@ -100,9 +96,7 @@ mod test_presign {
         let bucket = "yuanyq";
         let object = "rust-sdk-test/katex.zip";
 
-        let options = PresignGetOptionsBuilder::new(3600)
-            .build();
-
+        let options = PresignGetOptionsBuilder::new(3600).build();
 
         let url = client.presign_url(bucket, object, options);
 
@@ -117,10 +111,7 @@ mod test_presign {
         let bucket = "yuanyq";
         let object = "rust-sdk-test/test-1.webp";
 
-        let options = PresignGetOptionsBuilder::new(3600)
-            .response_content_disposition("inline")
-            .process("style/test-img-process")
-            .build();
+        let options = PresignGetOptionsBuilder::new(3600).process("style/test-img-process").build();
 
         let url = client.presign_url(bucket, object, options);
 

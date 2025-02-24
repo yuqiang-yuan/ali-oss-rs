@@ -27,6 +27,7 @@ Aliyun Object Storage Service (OSS) is a massive, secure, cost-effective, and hi
   - Put object: create a folder
   - Get object: download to local file
   - Get object metadata
+  - URL with signature for `GET` request
   - Head object: get detail metadata of an object
   - Copy object
   - Delete object, or delete multiple objects
