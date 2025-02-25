@@ -7,11 +7,10 @@ use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use crate::{
     common,
     error::Error,
-    Result,
     object_common::{build_put_object_request, PutObjectOptions},
     request::{OssRequest, RequestMethod},
     util::{sanitize_etag, validate_bucket_name, validate_object_key},
-    RequestBody,
+    RequestBody, Result,
 };
 
 pub type InitiateMultipartUploadOptions = PutObjectOptions;
@@ -73,6 +72,18 @@ pub struct UploadPartRequest {
     pub upload_id: String,
 }
 
+impl UploadPartRequest {
+    pub fn new<S>(part_number: u32, upload_id: S) -> Self
+    where
+        S: AsRef<str>,
+    {
+        Self {
+            part_number,
+            upload_id: upload_id.as_ref().to_string(),
+        }
+    }
+}
+
 /// Upload part result.
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -90,6 +101,144 @@ impl From<HashMap<String, String>> for UploadPartResult {
             request_id: headers.remove("x-oss-request-id").unwrap_or_default(),
             etag: sanitize_etag(headers.remove("etag").unwrap_or_default()),
         }
+    }
+}
+
+/// Data required for upload part copy for copying object larger than 1GB
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+pub struct UploadPartCopyRequest {
+    /// 每一个上传的 Part 都有一个标识它的号码（partNumber）。
+    ///
+    /// 取值：1~10000
+    ///
+    /// 单个 Part 的大小限制为 100 KB~5 GB。
+    /// MultipartUpload 事件中除最后一个 Part 以外，其他 Part 的大小都要大于或等于 100 KB。
+    /// 因不确定是否为最后一个 Part，
+    /// UploadPart 接口并不会立即校验上传 Part 的大小，只有当 CompleteMultipartUpload 时才会校验。
+    pub part_number: u32,
+
+    /// The upload id returned from InitiateMultipartUpload
+    pub upload_id: String,
+
+    /// The object key **without** bucket part because UploadPartCopy can copy objects in the same bucket only. e.g. `path/to/sub-path/obj_key.zip`.
+    pub source_object_key: String,
+}
+
+impl UploadPartCopyRequest {
+    pub fn new<S1, S2>(part_number: u32, upload_id: S1, source_object_key: S2) -> Self
+    where
+        S1: AsRef<str>,
+        S2: AsRef<str>,
+    {
+        Self {
+            part_number,
+            upload_id: upload_id.as_ref().to_string(),
+            source_object_key: source_object_key.as_ref().to_string(),
+        }
+    }
+}
+
+/// Other options for upload part copy
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+pub struct UploadPartCopyOptions {
+    /// 如果源 Object 开启了版本控制，这里可以指明版本，实现从 Object 的指定版本进行拷贝
+    pub source_object_version_id: Option<String>,
+
+    /// 源 Object 的拷贝范围。例如设置 `bytes=0-9`，表示拷贝 `0` 到 `9` 这 `10` 个字节。
+    /// 这个范围是两端闭区间的 `[start, end]`，并且下标从 `0` 开始。也就是最大的取值范围是 `[0, file_length - 1]`
+    ///
+    /// - 不指定该请求头时，表示拷贝整个源 Object。
+    /// - 当指定的范围不符合规范时，则拷贝整个源 Object
+    pub copy_source_range: Option<String>,
+
+    pub copy_source_if_match: Option<String>,
+    pub copy_source_if_none_match: Option<String>,
+    pub copy_source_if_unmodified_since: Option<String>,
+    pub copy_source_if_modified_since: Option<String>,
+}
+
+#[derive(Debug, Default)]
+pub struct UploadPartCopyOptionsBuilder {
+    options: UploadPartCopyOptions,
+}
+
+impl UploadPartCopyOptionsBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn source_object_version_id<S: Into<String>>(mut self, version_id: S) -> Self {
+        self.options.source_object_version_id = Some(version_id.into());
+        self
+    }
+
+    pub fn copy_source_range<S: Into<String>>(mut self, range: S) -> Self {
+        self.options.copy_source_range = Some(range.into());
+        self
+    }
+
+    pub fn copy_source_if_match<S: Into<String>>(mut self, etag: S) -> Self {
+        self.options.copy_source_if_match = Some(etag.into());
+        self
+    }
+
+    pub fn copy_source_if_none_match<S: Into<String>>(mut self, etag: S) -> Self {
+        self.options.copy_source_if_none_match = Some(etag.into());
+        self
+    }
+
+    pub fn copy_source_if_unmodified_since<S: Into<String>>(mut self, timestamp: S) -> Self {
+        self.options.copy_source_if_unmodified_since = Some(timestamp.into());
+        self
+    }
+
+    pub fn copy_source_if_modified_since<S: Into<String>>(mut self, timestamp: S) -> Self {
+        self.options.copy_source_if_modified_since = Some(timestamp.into());
+        self
+    }
+
+    pub fn build(self) -> UploadPartCopyOptions {
+        self.options
+    }
+}
+
+/// Result for upload part copy
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+pub struct UploadPartCopyResult {
+    pub last_modified: String,
+    pub etag: String,
+}
+
+impl UploadPartCopyResult {
+    pub(crate) fn from_xml(xml: &str) -> Result<Self> {
+        let mut reader = quick_xml::Reader::from_str(xml);
+        let mut tag = String::new();
+        let mut data = Self::default();
+
+        loop {
+            match reader.read_event()? {
+                Event::Eof => break,
+                Event::Start(t) => tag = String::from_utf8_lossy(t.local_name().as_ref()).to_string(),
+                Event::Text(text) => {
+                    let s = text.unescape()?.trim().to_string();
+                    match tag.as_str() {
+                        "LastModified" => data.last_modified = s,
+                        "ETag" => data.etag = sanitize_etag(s),
+                        _ => {}
+                    }
+                }
+                Event::End(_) => tag.clear(),
+                _ => {}
+            }
+        }
+
+        Ok(data)
     }
 }
 
@@ -514,9 +663,86 @@ pub(crate) fn build_upload_part_request(bucket_name: &str, object_key: &str, bod
     Ok(request)
 }
 
+pub(crate) fn build_upload_part_copy_request(
+    bucket_name: &str,
+    object_key: &str,
+    data: UploadPartCopyRequest,
+    options: &Option<UploadPartCopyOptions>,
+) -> Result<OssRequest> {
+    if !validate_bucket_name(bucket_name) {
+        return Err(Error::Other(format!("invalid bucket name: {}", bucket_name)));
+    }
+
+    if !validate_object_key(object_key) {
+        return Err(Error::Other(format!("invalid destination object key: {}", object_key)));
+    }
+
+    if !validate_object_key(&data.source_object_key) {
+        return Err(Error::Other(format!("invalid source object key: {}", data.source_object_key)));
+    }
+
+    if !(1..=10000).contains(&data.part_number) {
+        return Err(Error::Other(format!("invalid part number: {}", data.part_number)));
+    }
+
+    let UploadPartCopyRequest {
+        part_number,
+        upload_id,
+        source_object_key,
+    } = data;
+
+    if upload_id.is_empty() {
+        return Err(Error::Other("invalid upload id: must not be empty".to_string()));
+    }
+
+    if !validate_object_key(&source_object_key) {
+        return Err(Error::Other(format!("invalid source object key: {}", source_object_key)));
+    }
+
+    let mut request = OssRequest::new()
+        .method(RequestMethod::Put)
+        .bucket(bucket_name)
+        .object(object_key)
+        .add_query("uploadId", upload_id)
+        .add_query("partNumber", part_number.to_string());
+
+    let mut copy_source = format!("/{}/{}", bucket_name, source_object_key);
+    if let Some(opt) = options {
+        if let Some(v) = &opt.source_object_version_id {
+            copy_source = format!("{}?versionId={}", copy_source, v);
+        }
+    }
+
+    request = request.add_header("x-oss-copy-source", &copy_source);
+
+    if let Some(options) = options {
+        if let Some(s) = &options.copy_source_range {
+            request = request.add_header("x-oss-copy-source-range", s);
+        }
+
+        if let Some(s) = &options.copy_source_if_match {
+            request = request.add_header("x-oss-copy-source-if-match", s);
+        }
+
+        if let Some(s) = &options.copy_source_if_none_match {
+            request = request.add_header("x-oss-copy-source-if-none-match", s);
+        }
+
+        if let Some(s) = &options.copy_source_if_modified_since {
+            request = request.add_header("x-oss-copy-source-if-modified-since", s);
+        }
+
+        if let Some(s) = &options.copy_source_if_unmodified_since {
+            request = request.add_header("x-oss-copy-source-if-unmodified-since", s);
+        }
+    }
+
+    Ok(request)
+}
+
 pub(crate) fn build_complete_multipart_uploads_request(bucket_name: &str, object_key: &str, data: CompleteMultipartUploadRequest) -> Result<OssRequest> {
     if !validate_bucket_name(bucket_name) {
-        return Err(Error::Other("invalid bucket name".to_string()));
+        return Err(Error::Other(format!("invalid bucket name: {}", bucket_name)));
     }
 
     if !validate_object_key(object_key) {

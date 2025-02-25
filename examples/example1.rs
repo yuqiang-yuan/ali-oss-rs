@@ -1,4 +1,4 @@
-use ali_oss_rs::{bucket::BucketOperations, Result, Client};
+use ali_oss_rs::{bucket::BucketOperations, Client, Result};
 
 #[tokio::main]
 async fn main() -> Result<()> {

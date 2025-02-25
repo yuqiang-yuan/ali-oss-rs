@@ -4,7 +4,11 @@ use base64::prelude::{Engine, BASE64_STANDARD};
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 
 use crate::{
-    common::{self, build_tag_string, Acl, MetadataDirective, ObjectType, ServerSideEncryptionAlgorithm, StorageClass, TagDirective, MIME_TYPE_XML}, error::Error, request::{OssRequest, RequestMethod}, util::{sanitize_etag, validate_bucket_name, validate_meta_key, validate_object_key, validate_tag_key, validate_tag_value}, RequestBody, Result
+    common::{self, build_tag_string, Acl, MetadataDirective, ObjectType, ServerSideEncryptionAlgorithm, StorageClass, TagDirective, MIME_TYPE_XML},
+    error::Error,
+    request::{OssRequest, RequestMethod},
+    util::{sanitize_etag, validate_bucket_name, validate_meta_key, validate_object_key, validate_tag_key, validate_tag_value},
+    RequestBody, Result,
 };
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
@@ -1078,7 +1082,6 @@ pub(crate) fn build_copy_object_request(
     dest_object_key: &str,
     options: &Option<CopyObjectOptions>,
 ) -> Result<OssRequest> {
-
     if !validate_bucket_name(source_bucket_name) {
         return Err(Error::Other(format!("invalid source bucket name: {}", source_bucket_name)));
     }
@@ -1094,7 +1097,6 @@ pub(crate) fn build_copy_object_request(
     if !validate_object_key(dest_object_key) {
         return Err(Error::Other(format!("invalid destination object key: {}", dest_object_key)));
     }
-
 
     let mut request = OssRequest::new()
         .method(RequestMethod::Put)

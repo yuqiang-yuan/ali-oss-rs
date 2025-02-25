@@ -11,8 +11,7 @@ use url::Url;
 
 use crate::{
     error::{Error, ErrorResponse},
-    Result,
-    get_region_from_endpoint, hmac_sha256, util, RequestBody,
+    get_region_from_endpoint, hmac_sha256, util, RequestBody, Result,
 };
 
 pub mod bucket;

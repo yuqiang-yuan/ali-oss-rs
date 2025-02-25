@@ -6,8 +6,8 @@ use crate::{
         StorageClass, TransferAcceleration, Versioning,
     },
     error::Error,
-    Result,
     request::{OssRequest, RequestMethod},
+    Result,
 };
 
 /// Summary information of a bucket.

@@ -4,12 +4,16 @@ use base64::{prelude::BASE64_STANDARD, Engine};
 use reqwest::StatusCode;
 
 use crate::{
-    error::Error, object_common::{
+    error::Error,
+    object_common::{
         build_copy_object_request, build_delete_multiple_objects_request, build_get_object_request, build_head_object_request, build_put_object_request,
         build_restore_object_request, AppendObjectOptions, AppendObjectResult, CopyObjectOptions, CopyObjectResult, DeleteMultipleObjectsConfig,
         DeleteMultipleObjectsResult, DeleteObjectOptions, DeleteObjectResult, GetObjectMetadataOptions, GetObjectOptions, GetObjectResult, HeadObjectOptions,
         ObjectMetadata, PutObjectOptions, PutObjectResult, RestoreObjectRequest, RestoreObjectResult,
-    }, request::{OssRequest, RequestMethod}, util::{validate_bucket_name, validate_object_key, validate_path}, RequestBody, Result
+    },
+    request::{OssRequest, RequestMethod},
+    util::{validate_bucket_name, validate_object_key, validate_path},
+    RequestBody, Result,
 };
 
 use super::{BytesBody, Client};
@@ -556,10 +560,7 @@ impl ObjectOperations for Client {
             return Err(Error::Other(format!("invalid object key: {}", object_key)));
         }
 
-        let mut request = OssRequest::new()
-            .method(RequestMethod::Delete)
-            .bucket(bucket_name)
-            .object(object_key);
+        let mut request = OssRequest::new().method(RequestMethod::Delete).bucket(bucket_name).object(object_key);
 
         if let Some(options) = options {
             if let Some(s) = options.version_id {
@@ -608,7 +609,6 @@ impl ObjectOperations for Client {
         S1: AsRef<str>,
         S2: AsRef<str>,
     {
-
         let bucket_name = bucket_name.as_ref();
         let object_key = object_key.as_ref();
 

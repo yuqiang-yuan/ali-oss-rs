@@ -7,16 +7,15 @@ use base64::{prelude::BASE64_STANDARD, Engine};
 
 use crate::{
     error::Error,
-    Result,
     multipart_common::{
         build_complete_multipart_uploads_request, build_initiate_multipart_uploads_request, build_list_multipart_uploads_request, build_list_parts_request,
-        build_upload_part_request, CompleteMultipartUploadRequest, CompleteMultipartUploadResult, InitiateMultipartUploadOptions,
-        InitiateMultipartUploadResult, ListMultipartUploadsOptions, ListMultipartUploadsResult, ListPartsOptions, ListPartsResult, UploadPartRequest,
-        UploadPartResult,
+        build_upload_part_copy_request, build_upload_part_request, CompleteMultipartUploadRequest, CompleteMultipartUploadResult,
+        InitiateMultipartUploadOptions, InitiateMultipartUploadResult, ListMultipartUploadsOptions, ListMultipartUploadsResult, ListPartsOptions,
+        ListPartsResult, UploadPartCopyOptions, UploadPartCopyRequest, UploadPartCopyResult, UploadPartRequest, UploadPartResult,
     },
     request::{OssRequest, RequestMethod},
     util::validate_bucket_name,
-    Client, RequestBody,
+    Client, RequestBody, Result,
 };
 
 #[async_trait]
@@ -89,6 +88,22 @@ pub trait MultipartUploadsOperations {
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send,
         S3: AsRef<str> + Send;
+
+    /// When you want to copy a file larger than 1GB, you must use `upload_part_copy`.
+    /// First, initiate a multipart upload and get `uploadId`, then call this method to upload parts of the source object.
+    /// Finally complete the multipart upload by invoking `complete_multipart_uploads`
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/uploadpartcopy>
+    async fn upload_part_copy<S1, S2>(
+        &self,
+        bucket_name: S1,
+        dest_object_key: S2,
+        data: UploadPartCopyRequest,
+        options: Option<UploadPartCopyOptions>,
+    ) -> Result<UploadPartCopyResult>
+    where
+        S1: AsRef<str> + Send,
+        S2: AsRef<str> + Send;
 
     /// Complete multipart uploads
     ///
@@ -226,6 +241,29 @@ impl MultipartUploadsOperations for Client {
         self.upload_part_from_buffer(bucket_name, object_key, data, params).await
     }
 
+    /// When you want to copy a file larger than 1GB, you must use `upload_part_copy`.
+    /// First, initiate a multipart upload and get `uploadId`, then call this method to upload parts of the source object.
+    /// Finally complete the multipart upload by invoking `complete_multipart_uploads`
+    ///
+    /// Offical document: <https://help.aliyun.com/zh/oss/developer-reference/uploadpartcopy>
+    async fn upload_part_copy<S1, S2>(
+        &self,
+        bucket_name: S1,
+        dest_object_key: S2,
+        data: UploadPartCopyRequest,
+        options: Option<UploadPartCopyOptions>,
+    ) -> Result<UploadPartCopyResult>
+    where
+        S1: AsRef<str> + Send,
+        S2: AsRef<str> + Send,
+    {
+        let bucket_name = bucket_name.as_ref();
+        let object_key = dest_object_key.as_ref();
+        let requet = build_upload_part_copy_request(bucket_name, object_key, data, &options)?;
+        let (_, xml) = self.do_request::<String>(requet).await?;
+        UploadPartCopyResult::from_xml(&xml)
+    }
+
     /// Complete multipart uploads
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/completemultipartupload>
@@ -275,7 +313,9 @@ mod test_multipart_async {
 
     use crate::{
         multipart::MultipartUploadsOperations,
-        multipart_common::{CompleteMultipartUploadRequest, ListMultipartUploadsOptionsBuilder, UploadPartRequest},
+        multipart_common::{
+            CompleteMultipartUploadRequest, ListMultipartUploadsOptionsBuilder, UploadPartCopyOptionsBuilder, UploadPartCopyRequest, UploadPartRequest,
+        },
         Client,
     };
 
@@ -480,5 +520,57 @@ mod test_multipart_async {
         let list_parts_response = client.list_parts(bucket, object, upload_id.clone(), None).await;
         log::debug!("{:#?}", list_parts_response);
         assert!(list_parts_response.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_upload_part_copy_asyn() {
+        setup();
+
+        let client = Client::from_env();
+
+        let bucket = "yuanyq";
+
+        let source_object_key = "rust-sdk-test/img-appended-from-file.jpg";
+        let dest_object_key = "rust-sdk-test/img-from-upload-part-copy.jpg";
+
+        let init_response = client.initiate_multipart_uploads(bucket, dest_object_key, None).await;
+        assert!(init_response.is_ok());
+
+        let upload_id = init_response.unwrap().upload_id.clone();
+
+        // part 1
+        let upload_response = client
+            .upload_part_copy(
+                bucket,
+                dest_object_key,
+                UploadPartCopyRequest::new(1, &upload_id, source_object_key),
+                Some(UploadPartCopyOptionsBuilder::new().copy_source_range("bytes=0-185000").build()),
+            )
+            .await;
+        assert!(upload_response.is_ok());
+        log::debug!("upload response 1: {:#?}", upload_response);
+
+        let etag1 = upload_response.unwrap().etag;
+
+        let upload_response = client
+            .upload_part_copy(
+                bucket,
+                dest_object_key,
+                UploadPartCopyRequest::new(2, &upload_id, source_object_key),
+                Some(UploadPartCopyOptionsBuilder::new().copy_source_range("bytes=185001-").build()),
+            )
+            .await;
+        assert!(upload_response.is_ok());
+        log::debug!("upload response 2: {:#?}", upload_response);
+
+        let etag2 = upload_response.unwrap().etag;
+
+        let comp_data = CompleteMultipartUploadRequest {
+            upload_id,
+            parts: vec![(1, etag1), (2, etag2)],
+        };
+
+        let comp_response = client.complete_multipart_uploads(bucket, dest_object_key, comp_data).await;
+        log::debug!("complete multipart upload response: {:#?}", comp_response);
     }
 }

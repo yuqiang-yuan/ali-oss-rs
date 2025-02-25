@@ -7,9 +7,9 @@ use crate::{
         ListBucketsOptions, ListBucketsResult, ListObjectsOptions, ListObjectsResult, PutBucketConfiguration, PutBucketOptions,
     },
     error::Error,
-    Result,
     request::{OssRequest, RequestMethod},
     util::validate_bucket_name,
+    Result,
 };
 
 #[async_trait]
@@ -111,10 +111,7 @@ impl BucketOperations for crate::Client {
         if !validate_bucket_name(bucket_name) {
             return Err(Error::Other(format!("invalid bucket name: {}", bucket_name)));
         }
-        let request_builder = OssRequest::new()
-            .method(RequestMethod::Get)
-            .bucket(bucket_name)
-            .add_query("bucketInfo", "");
+        let request_builder = OssRequest::new().method(RequestMethod::Get).bucket(bucket_name).add_query("bucketInfo", "");
 
         let (_, content) = self.do_request::<String>(request_builder).await?;
 
@@ -131,10 +128,7 @@ impl BucketOperations for crate::Client {
             return Err(Error::Other(format!("invalid bucket name: {}", bucket_name)));
         }
 
-        let request_builder = OssRequest::new()
-            .method(RequestMethod::Get)
-            .bucket(bucket_name)
-            .add_query("location", "");
+        let request_builder = OssRequest::new().method(RequestMethod::Get).bucket(bucket_name).add_query("location", "");
 
         let (_, content) = self.do_request::<String>(request_builder).await?;
 
