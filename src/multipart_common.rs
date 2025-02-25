@@ -8,8 +8,8 @@ use crate::{
     common,
     error::{Error, Result},
     object_common::{build_put_object_request, PutObjectOptions},
-    request::{RequestBuilder, RequestMethod},
-    util::{sanitize_etag, validate_object_key},
+    request::{OssRequest, RequestMethod},
+    util::{sanitize_etag, validate_bucket_name, validate_object_key},
     RequestBody,
 };
 
@@ -36,7 +36,7 @@ impl InitiateMultipartUploadResult {
                 Event::Eof => break,
                 Event::Start(t) => tag = String::from_utf8_lossy(t.local_name().as_ref()).to_string(),
                 Event::Text(s) => {
-                    let text = s.unescape()?.to_string();
+                    let text = s.unescape()?.trim().to_string();
                     match tag.as_str() {
                         "Bucket" => data.bucket = text,
                         "Key" => data.key = text,
@@ -158,7 +158,7 @@ impl CompleteMultipartUploadResult {
                 Event::Eof => break,
                 Event::Start(t) => tag = String::from_utf8_lossy(t.local_name().as_ref()).to_string(),
                 Event::Text(s) => {
-                    let text = s.unescape()?.to_string();
+                    let text = s.unescape()?.trim().to_string();
                     match tag.as_str() {
                         "Bucket" => data.bucket = text,
                         "Key" => data.key = text,
@@ -262,7 +262,7 @@ impl ListMultipartUploadsResultItem {
                 Event::Eof => break,
                 Event::Start(t) => tag = String::from_utf8_lossy(t.local_name().as_ref()).to_string(),
                 Event::Text(s) => {
-                    let s = s.unescape()?.to_string();
+                    let s = s.unescape()?.trim().to_string();
                     match tag.as_str() {
                         "Key" => item.key = s,
                         "UploadId" => item.upload_id = s,
@@ -321,14 +321,14 @@ impl ListMultipartUploadsResult {
                     }
                 }
                 Event::Text(s) => {
-                    let text = s.unescape()?.to_string();
+                    let text = s.unescape()?.trim().to_string();
                     match tag.as_str() {
                         "Bucket" => ret.bucket = text,
-                        "KeyMarker" => ret.key_marker = Some(text),
-                        "UploadIdMarker" => ret.upload_id_marker = Some(text),
-                        "NextKeyMarker" => ret.next_key_marker = Some(text),
-                        "NextUploadIdMarker" => ret.next_upload_id_marker = Some(text),
-                        "Prefix" if level == 2 => ret.prefix = Some(text),
+                        "KeyMarker" => ret.key_marker = if text.is_empty() { None } else { Some(text) },
+                        "UploadIdMarker" => ret.upload_id_marker = if text.is_empty() { None } else { Some(text) },
+                        "NextKeyMarker" => ret.next_key_marker = if text.is_empty() { None } else { Some(text) },
+                        "NextUploadIdMarker" => ret.next_upload_id_marker = if text.is_empty() { None } else { Some(text) },
+                        "Prefix" if level == 2 => ret.prefix = if text.is_empty() { None } else { Some(text) },
                         "Prefix" if level == 3 => ret.common_prefixes.push(text),
                         "Delimiter" => ret.delimiter = text.chars().next(),
                         "MaxUploads" => ret.max_uploads = text.parse::<u32>().unwrap_or_default(),
@@ -348,11 +348,123 @@ impl ListMultipartUploadsResult {
     }
 }
 
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+pub struct ListPartsOptions {
+    /// Maximum parts number in response data. Valida data range: `[1, 1000]`
+    pub max_parts: Option<u32>,
+
+    /// The start part number. only parts which numbers are greater than the give `part_number_marker` will be returned
+    pub part_number_marker: Option<u32>,
+}
+
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+pub struct ListPartsResultItem {
+    pub etag: String,
+    pub part_number: u32,
+    pub size: u64,
+    pub last_modified: String,
+}
+
+impl ListPartsResultItem {
+    pub(crate) fn from_xml_reader(reader: &mut quick_xml::Reader<&[u8]>) -> Result<Self> {
+        let mut tag = String::new();
+        let mut data = Self::default();
+
+        loop {
+            match reader.read_event()? {
+                Event::Eof => break,
+                Event::Start(t) => tag = String::from_utf8_lossy(t.local_name().as_ref()).to_string(),
+                Event::Text(text) => {
+                    let s = text.unescape()?.trim().to_string();
+                    match tag.as_str() {
+                        "PartNumber" => data.part_number = s.parse()?,
+                        "Size" => data.size = s.parse()?,
+                        "ETag" => data.etag = sanitize_etag(s),
+                        "LastModified" => data.last_modified = s,
+                        _ => {}
+                    }
+                }
+                Event::End(t) => {
+                    tag.clear();
+                    if t.local_name().as_ref() == b"Part" {
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        Ok(data)
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+pub struct ListPartsResult {
+    pub bucket: String,
+    pub key: String,
+    pub upload_id: String,
+    pub max_parts: Option<u32>,
+    pub part_number_marker: Option<u32>,
+    pub next_part_number_marker: Option<u32>,
+    pub is_truncated: bool,
+    pub parts: Vec<ListPartsResultItem>,
+}
+
+impl ListPartsResult {
+    pub(crate) fn from_xml(xml: &str) -> Result<Self> {
+        let mut reader = quick_xml::Reader::from_str(xml);
+        let mut tag = String::new();
+        let mut data = Self::default();
+
+        loop {
+            match reader.read_event()? {
+                Event::Eof => break,
+                Event::Start(t) => {
+                    if t.local_name().as_ref() == b"Part" {
+                        data.parts.push(ListPartsResultItem::from_xml_reader(&mut reader)?);
+                    } else {
+                        tag = String::from_utf8_lossy(t.local_name().as_ref()).to_string();
+                    }
+                }
+                Event::Text(text) => {
+                    let s = text.unescape()?.trim().to_string();
+                    match tag.as_str() {
+                        "Bucket" => data.bucket = s,
+                        "Key" => data.key = s,
+                        "UploadId" => data.upload_id = s,
+                        "MaxParts" => data.max_parts = if s.is_empty() { None } else { Some(s.parse()?) },
+                        "PartNumberMarker" => data.part_number_marker = if s.is_empty() { None } else { Some(s.parse()?) },
+                        "NextPartNumberMarker" => data.next_part_number_marker = if s.is_empty() { None } else { Some(s.parse()?) },
+                        "IsTruncated" => data.is_truncated = s == "true",
+                        _ => {}
+                    }
+                }
+                Event::End(_) => {
+                    tag.clear();
+                }
+                _ => {}
+            }
+        }
+
+        Ok(data)
+    }
+}
+
 pub(crate) fn build_initiate_multipart_uploads_request(
     bucket_name: &str,
     object_key: &str,
     options: &Option<InitiateMultipartUploadOptions>,
-) -> Result<RequestBuilder> {
+) -> Result<OssRequest> {
+    if !validate_bucket_name(bucket_name) {
+        return Err(Error::Other(format!("invalid bucket name: {}", bucket_name)));
+    }
+
     if !validate_object_key(object_key) {
         return Err(Error::Other(format!("invalid object key: {}", object_key)));
     }
@@ -368,18 +480,29 @@ pub(crate) fn build_initiate_multipart_uploads_request(
     Ok(request)
 }
 
-pub(crate) fn build_upload_part_request(bucket_name: &str, object_key: &str, body: RequestBody, params: UploadPartRequest) -> Result<RequestBuilder> {
+pub(crate) fn build_upload_part_request(bucket_name: &str, object_key: &str, body: RequestBody, params: UploadPartRequest) -> Result<OssRequest> {
+    if !validate_bucket_name(bucket_name) {
+        return Err(Error::Other(format!("invalid bucket name: {}", bucket_name)));
+    }
+
+    if !validate_object_key(object_key) {
+        return Err(Error::Other(format!("invalid object key: {}", object_key)));
+    }
+
     let UploadPartRequest { part_number, upload_id } = params;
 
-    if part_number < 1 || part_number > 10000 {
-        return Err(Error::Other(format!("invalid part number: {}", part_number)));
+    if !(1..=10000).contains(&part_number) {
+        return Err(Error::Other(format!(
+            "invalid part number: {}. part number should be in range [1, 10000]",
+            part_number
+        )));
     }
 
     if upload_id.is_empty() {
-        return Err(Error::Other("invalid upload id".to_string()));
+        return Err(Error::Other("invalid upload id. upload id must not be empty".to_string()));
     }
 
-    let request = RequestBuilder::new()
+    let request = OssRequest::new()
         .method(RequestMethod::Put)
         .bucket(bucket_name)
         .object(object_key)
@@ -390,8 +513,8 @@ pub(crate) fn build_upload_part_request(bucket_name: &str, object_key: &str, bod
     Ok(request)
 }
 
-pub(crate) fn build_complete_multipart_uploads_request(bucket_name: &str, object_key: &str, data: CompleteMultipartUploadRequest) -> Result<RequestBuilder> {
-    if bucket_name.is_empty() {
+pub(crate) fn build_complete_multipart_uploads_request(bucket_name: &str, object_key: &str, data: CompleteMultipartUploadRequest) -> Result<OssRequest> {
+    if !validate_bucket_name(bucket_name) {
         return Err(Error::Other("invalid bucket name".to_string()));
     }
 
@@ -399,11 +522,19 @@ pub(crate) fn build_complete_multipart_uploads_request(bucket_name: &str, object
         return Err(Error::Other(format!("invalid object key: {}", object_key)));
     }
 
+    if data.upload_id.is_empty() {
+        return Err(Error::Other("upload id must not be empty".to_string()));
+    }
+
+    if data.parts.is_empty() {
+        return Err(Error::Other("multipart uploads items must not be empty".to_string()));
+    }
+
     let upload_id = data.upload_id.clone();
 
     let xml = data.into_xml()?;
 
-    let request = RequestBuilder::new()
+    let request = OssRequest::new()
         .method(RequestMethod::Post)
         .bucket(bucket_name)
         .object(object_key)
@@ -414,8 +545,12 @@ pub(crate) fn build_complete_multipart_uploads_request(bucket_name: &str, object
     Ok(request)
 }
 
-pub(crate) fn build_list_multipart_uploads_request(bucket_name: &str, options: &Option<ListMultipartUploadsOptions>) -> Result<RequestBuilder> {
-    let mut request = RequestBuilder::new().method(RequestMethod::Get).bucket(bucket_name).add_query("uploads", "");
+pub(crate) fn build_list_multipart_uploads_request(bucket_name: &str, options: &Option<ListMultipartUploadsOptions>) -> Result<OssRequest> {
+    if !validate_bucket_name(bucket_name) {
+        return Err(Error::Other("invalid bucket name".to_string()));
+    }
+
+    let mut request = OssRequest::new().method(RequestMethod::Get).bucket(bucket_name).add_query("uploads", "");
 
     if let Some(options) = options {
         if let Some(c) = options.delimiter {
@@ -438,6 +573,38 @@ pub(crate) fn build_list_multipart_uploads_request(bucket_name: &str, options: &
             request = request.add_query("prefix", s);
         }
     }
+    Ok(request)
+}
+
+pub(crate) fn build_list_parts_request(bucket_name: &str, object_key: &str, upload_id: &str, options: &Option<ListPartsOptions>) -> Result<OssRequest> {
+    if !validate_bucket_name(bucket_name) {
+        return Err(Error::Other(format!("invalid bucket name: {}", bucket_name)));
+    }
+
+    if !validate_object_key(object_key) {
+        return Err(Error::Other(format!("invalid object key: {}", object_key)));
+    }
+
+    if upload_id.is_empty() {
+        return Err(Error::Other("upload id must not be empty".to_string()));
+    }
+
+    let mut request = OssRequest::new()
+        .method(RequestMethod::Get)
+        .bucket(bucket_name)
+        .object(object_key)
+        .add_query("uploadId", upload_id);
+
+    if let Some(options) = options {
+        if let Some(n) = options.max_parts {
+            request = request.add_query("max-parts", n.to_string());
+        }
+
+        if let Some(n) = options.part_number_marker {
+            request = request.add_query("part-number-marker", n.to_string());
+        }
+    }
+
     Ok(request)
 }
 

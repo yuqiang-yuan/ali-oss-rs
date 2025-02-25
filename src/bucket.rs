@@ -7,7 +7,7 @@ use crate::{
         ListBucketsOptions, ListBucketsResult, ListObjectsOptions, ListObjectsResult, PutBucketConfiguration, PutBucketOptions,
     },
     error::{Error, Result},
-    request::{RequestBuilder, RequestMethod},
+    request::{OssRequest, RequestMethod},
     util::validate_bucket_name,
 };
 
@@ -88,7 +88,7 @@ impl BucketOperations for crate::Client {
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/deletebucket>
     async fn delete_bucket<S: AsRef<str> + Send>(&self, bucket_name: S) -> Result<()> {
-        let request_builder = RequestBuilder::new().method(RequestMethod::Delete).bucket(bucket_name.as_ref());
+        let request_builder = OssRequest::new().method(RequestMethod::Delete).bucket(bucket_name.as_ref());
 
         self.do_request::<()>(request_builder).await?;
 
@@ -99,7 +99,7 @@ impl BucketOperations for crate::Client {
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getbucketinfo>
     async fn get_bucket_info<S: AsRef<str> + Send>(&self, bucket_name: S) -> Result<BucketDetail> {
-        let request_builder = RequestBuilder::new()
+        let request_builder = OssRequest::new()
             .method(RequestMethod::Get)
             .bucket(bucket_name.as_ref())
             .add_query("bucketInfo", "");
@@ -113,7 +113,7 @@ impl BucketOperations for crate::Client {
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getbucketlocation>
     async fn get_bucket_location<S: AsRef<str> + Send>(&self, bucket_name: S) -> Result<String> {
-        let request_builder = RequestBuilder::new()
+        let request_builder = OssRequest::new()
             .method(RequestMethod::Get)
             .bucket(bucket_name.as_ref())
             .add_query("location", "");
@@ -127,10 +127,7 @@ impl BucketOperations for crate::Client {
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getbucketstat>
     async fn get_bucket_stat<S: AsRef<str> + Send>(&self, bucket_name: S) -> Result<BucketStat> {
-        let request_builder = RequestBuilder::new()
-            .method(RequestMethod::Get)
-            .bucket(bucket_name.as_ref())
-            .add_query("stat", "");
+        let request_builder = OssRequest::new().method(RequestMethod::Get).bucket(bucket_name.as_ref()).add_query("stat", "");
 
         let (_, content) = self.do_request::<String>(request_builder).await?;
 

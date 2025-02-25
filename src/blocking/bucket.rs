@@ -4,7 +4,7 @@ use crate::{
         ListBucketsOptions, ListBucketsResult, ListObjectsOptions, ListObjectsResult, PutBucketConfiguration, PutBucketOptions,
     },
     error::{Error, Result},
-    request::{RequestBuilder, RequestMethod},
+    request::{OssRequest, RequestMethod},
     util::validate_bucket_name,
 };
 
@@ -45,7 +45,7 @@ impl BucketOperations for Client {
     }
 
     fn get_bucket_info<S: AsRef<str>>(&self, bucket_name: S) -> Result<BucketDetail> {
-        let request_builder = RequestBuilder::new()
+        let request_builder = OssRequest::new()
             .method(RequestMethod::Get)
             .bucket(bucket_name.as_ref())
             .add_query("bucketInfo", "");
@@ -56,7 +56,7 @@ impl BucketOperations for Client {
     }
 
     fn get_bucket_location<S: AsRef<str>>(&self, bucket_name: S) -> Result<String> {
-        let request_builder = RequestBuilder::new()
+        let request_builder = OssRequest::new()
             .method(RequestMethod::Get)
             .bucket(bucket_name.as_ref())
             .add_query("location", "");
@@ -67,10 +67,7 @@ impl BucketOperations for Client {
     }
 
     fn get_bucket_stat<S: AsRef<str>>(&self, bucket_name: S) -> Result<BucketStat> {
-        let request_builder = RequestBuilder::new()
-            .method(RequestMethod::Get)
-            .bucket(bucket_name.as_ref())
-            .add_query("stat", "");
+        let request_builder = OssRequest::new().method(RequestMethod::Get).bucket(bucket_name.as_ref()).add_query("stat", "");
 
         let (_, content) = self.do_request::<String>(request_builder)?;
 
@@ -86,7 +83,7 @@ impl BucketOperations for Client {
     }
 
     fn delete_bucket<S: AsRef<str>>(&self, bucket_name: S) -> Result<()> {
-        let request_builder = RequestBuilder::new().method(RequestMethod::Delete).bucket(bucket_name.as_ref());
+        let request_builder = OssRequest::new().method(RequestMethod::Delete).bucket(bucket_name.as_ref());
 
         self.do_request::<()>(request_builder)?;
 

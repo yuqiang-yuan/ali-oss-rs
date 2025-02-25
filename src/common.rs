@@ -32,8 +32,8 @@ impl Owner {
                 }
 
                 Event::Text(e) => match current_tag.as_str() {
-                    "ID" => owner.id = e.unescape()?.to_string(),
-                    "DisplayName" => owner.display_name = e.unescape()?.to_string(),
+                    "ID" => owner.id = e.unescape()?.trim().to_string(),
+                    "DisplayName" => owner.display_name = e.unescape()?.trim().to_string(),
                     _ => {}
                 },
 

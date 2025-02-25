@@ -244,20 +244,20 @@ impl Client {
     /// So I put them in this method to prevent re-generating
     /// and better debuging output.
     /// And add some default headers to the request builder.
-    async fn do_request<T>(&self, mut request_builder: crate::request::RequestBuilder) -> Result<(HashMap<String, String>, T)>
+    async fn do_request<T>(&self, mut oss_request: crate::request::OssRequest) -> Result<(HashMap<String, String>, T)>
     where
         T: FromResponse,
     {
         if let Some(s) = &self.sts_token {
-            request_builder.headers_mut().insert("x-oss-security-token".to_string(), s.to_string());
+            oss_request.headers_mut().insert("x-oss-security-token".to_string(), s.to_string());
         }
 
-        let date_time_string = request_builder.headers.get("x-oss-date").unwrap();
+        let date_time_string = oss_request.headers.get("x-oss-date").unwrap();
         let date_string = &date_time_string[..8];
 
-        let additional_headers = request_builder.build_additional_headers();
+        let additional_headers = oss_request.build_additional_headers();
 
-        let string_to_sign = request_builder.build_string_to_sign(&self.region);
+        let string_to_sign = oss_request.build_string_to_sign(&self.region);
 
         log::debug!("string to sign: \n--------\n{}\n--------", string_to_sign);
 
@@ -280,7 +280,7 @@ impl Client {
 
         let mut header_map = HeaderMap::new();
 
-        for (k, v) in request_builder.headers.iter() {
+        for (k, v) in oss_request.headers.iter() {
             header_map.insert(HeaderName::from_str(k)?, HeaderValue::from_str(v)?);
         }
 
@@ -289,13 +289,13 @@ impl Client {
         header_map.insert(HeaderName::from_static("authorization"), HeaderValue::from_str(&auth_string)?);
         header_map.insert(HeaderName::from_static("date"), HeaderValue::from_str(&http_date)?);
 
-        let uri = request_builder.build_request_uri();
-        let query_string = request_builder.build_canonical_query_string();
+        let uri = oss_request.build_request_uri();
+        let query_string = oss_request.build_canonical_query_string();
 
-        let domain_name = if request_builder.bucket_name.is_empty() {
+        let domain_name = if oss_request.bucket_name.is_empty() {
             format!("{}://{}{}", self.scheme, self.endpoint, uri)
         } else {
-            format!("{}://{}.{}{}", self.scheme, request_builder.bucket_name, self.endpoint, uri)
+            format!("{}://{}.{}{}", self.scheme, oss_request.bucket_name, self.endpoint, uri)
         };
 
         let full_url = if query_string.is_empty() {
@@ -306,13 +306,10 @@ impl Client {
 
         log::debug!("full url: {}", full_url);
 
-        let mut req_builder = self
-            .http_client
-            .request(request_builder.method.into(), Url::parse(&full_url)?)
-            .headers(header_map);
+        let mut req_builder = self.http_client.request(oss_request.method.into(), Url::parse(&full_url)?).headers(header_map);
 
         // 根据 body 类型设置请求体
-        req_builder = match request_builder.body {
+        req_builder = match oss_request.body {
             RequestBody::Empty => req_builder,
             RequestBody::Text(text) => req_builder.body(text),
             RequestBody::Bytes(bytes) => req_builder.body(bytes),

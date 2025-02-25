@@ -11,7 +11,7 @@ use crate::{
         DeleteMultipleObjectsResult, DeleteObjectOptions, DeleteObjectResult, GetObjectMetadataOptions, GetObjectOptions, GetObjectResult, HeadObjectOptions,
         ObjectMetadata, PutObjectOptions, PutObjectResult, RestoreObjectRequest, RestoreObjectResult,
     },
-    request::{RequestBuilder, RequestMethod},
+    request::{OssRequest, RequestMethod},
     util::validate_path,
     RequestBody,
 };
@@ -453,7 +453,7 @@ impl ObjectOperations for Client {
         let bucket_name = bucket_name.as_ref();
         let object_key = object_key.as_ref();
 
-        let mut request = RequestBuilder::new()
+        let mut request = OssRequest::new()
             .method(RequestMethod::Head)
             .bucket(bucket_name)
             .object(object_key)
@@ -541,7 +541,7 @@ impl ObjectOperations for Client {
         S1: AsRef<str>,
         S2: AsRef<str>,
     {
-        let mut request = RequestBuilder::new()
+        let mut request = OssRequest::new()
             .method(RequestMethod::Delete)
             .bucket(bucket_name.as_ref())
             .object(object_key.as_ref());
@@ -593,7 +593,7 @@ impl ObjectOperations for Client {
         S1: AsRef<str>,
         S2: AsRef<str>,
     {
-        let request = RequestBuilder::new()
+        let request = OssRequest::new()
             .method(RequestMethod::Post)
             .bucket(bucket_name.as_ref())
             .object(object_key.as_ref())

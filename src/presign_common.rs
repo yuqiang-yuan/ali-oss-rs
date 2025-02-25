@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use crate::{
     common,
-    request::{RequestBuilder, RequestMethod},
+    request::{OssRequest, RequestMethod},
     util,
 };
 
@@ -110,8 +110,8 @@ impl PresignGetOptionsBuilder {
     }
 }
 
-pub(crate) fn build_presign_get_request(bucket_name: &str, object_key: &str, options: &PresignGetOptions) -> RequestBuilder {
-    let mut request = RequestBuilder::new()
+pub(crate) fn build_presign_get_request(bucket_name: &str, object_key: &str, options: &PresignGetOptions) -> OssRequest {
+    let mut request = OssRequest::new()
         .method(RequestMethod::Get)
         .bucket(bucket_name)
         .object(object_key)

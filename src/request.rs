@@ -50,7 +50,7 @@ impl From<RequestMethod> for reqwest::Method {
     }
 }
 
-pub(crate) struct RequestBuilder {
+pub(crate) struct OssRequest {
     pub bucket_name: String,
     pub object_key: String,
     pub method: RequestMethod,
@@ -65,7 +65,7 @@ pub(crate) struct RequestBuilder {
     pub body: RequestBody,
 }
 
-impl RequestBuilder {
+impl OssRequest {
     pub fn new() -> Self {
         let date_time_string = util::get_iso8601_date_time_string();
         Self {

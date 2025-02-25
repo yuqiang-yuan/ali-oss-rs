@@ -6,7 +6,7 @@ use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use crate::{
     common::{self, build_tag_string, Acl, MetadataDirective, ObjectType, ServerSideEncryptionAlgorithm, StorageClass, TagDirective, MIME_TYPE_XML},
     error::{Error, Result},
-    request::{RequestBuilder, RequestMethod},
+    request::{OssRequest, RequestMethod},
     util::{sanitize_etag, validate_meta_key, validate_object_key, validate_tag_key, validate_tag_value},
     RequestBody,
 };
@@ -512,7 +512,7 @@ pub(crate) fn build_put_object_request(
     object_key: &str,
     request_body: RequestBody,
     options: &Option<PutObjectOptions>,
-) -> Result<RequestBuilder> {
+) -> Result<OssRequest> {
     if bucket_name.is_empty() || object_key.is_empty() {
         return Err(Error::Other("bucket_name and object_key cannot be empty".to_string()));
     }
@@ -535,7 +535,7 @@ pub(crate) fn build_put_object_request(
         }
     }
 
-    let mut request = RequestBuilder::new().method(RequestMethod::Put).bucket(bucket_name).object(object_key);
+    let mut request = OssRequest::new().method(RequestMethod::Put).bucket(bucket_name).object(object_key);
 
     let content_length = match &request_body {
         RequestBody::Empty => 0u64,
@@ -1077,12 +1077,12 @@ pub(crate) fn build_copy_object_request(
     dest_bucket_name: &str,
     dest_object_key: &str,
     options: &Option<CopyObjectOptions>,
-) -> Result<RequestBuilder> {
+) -> Result<OssRequest> {
     if !validate_object_key(dest_object_key) {
         return Err(Error::Other(format!("invalid object key: {}", dest_object_key)));
     }
 
-    let mut request = RequestBuilder::new()
+    let mut request = OssRequest::new()
         .method(RequestMethod::Put)
         .bucket(dest_bucket_name)
         .object(dest_object_key)
@@ -1165,8 +1165,8 @@ pub(crate) fn build_copy_object_request(
     Ok(request)
 }
 
-pub(crate) fn build_get_object_request(bucket_name: &str, object_key: &str, options: &Option<GetObjectOptions>) -> RequestBuilder {
-    let mut request = RequestBuilder::new().method(RequestMethod::Get).bucket(bucket_name).object(object_key);
+pub(crate) fn build_get_object_request(bucket_name: &str, object_key: &str, options: &Option<GetObjectOptions>) -> OssRequest {
+    let mut request = OssRequest::new().method(RequestMethod::Get).bucket(bucket_name).object(object_key);
 
     if let Some(options) = options {
         if let Some(s) = &options.range {
@@ -1221,8 +1221,8 @@ pub(crate) fn build_get_object_request(bucket_name: &str, object_key: &str, opti
     request
 }
 
-pub(crate) fn build_head_object_request(bucket_name: &str, object_key: &str, options: &Option<HeadObjectOptions>) -> RequestBuilder {
-    let mut request = RequestBuilder::new().method(RequestMethod::Head).bucket(bucket_name).object(object_key);
+pub(crate) fn build_head_object_request(bucket_name: &str, object_key: &str, options: &Option<HeadObjectOptions>) -> OssRequest {
+    let mut request = OssRequest::new().method(RequestMethod::Head).bucket(bucket_name).object(object_key);
 
     if let Some(options) = options {
         if let Some(s) = &options.if_modified_since {
@@ -1432,7 +1432,7 @@ impl DeleteMultipleObjectsResult {
                 }
 
                 Event::Text(e) => {
-                    let s = e.unescape()?.to_string();
+                    let s = e.unescape()?.trim().to_string();
                     match tag.as_str() {
                         "Key" => current_item.key = s,
                         "VersionId" => current_item.version_id = Some(s),
@@ -1457,11 +1457,11 @@ impl DeleteMultipleObjectsResult {
     }
 }
 
-pub(crate) fn build_delete_multiple_objects_request<S>(bucket_name: &str, config: DeleteMultipleObjectsConfig<S>) -> Result<RequestBuilder>
+pub(crate) fn build_delete_multiple_objects_request<S>(bucket_name: &str, config: DeleteMultipleObjectsConfig<S>) -> Result<OssRequest>
 where
     S: AsRef<str>,
 {
-    let mut request = RequestBuilder::new()
+    let mut request = OssRequest::new()
         .method(RequestMethod::Post)
         .bucket(bucket_name)
         .add_query("delete", "")
@@ -1885,8 +1885,8 @@ impl From<HashMap<String, String>> for RestoreObjectResult {
     }
 }
 
-pub(crate) fn build_restore_object_request(bucket_name: &str, object_key: &str, config: RestoreObjectRequest) -> Result<RequestBuilder> {
-    let mut request = RequestBuilder::new()
+pub(crate) fn build_restore_object_request(bucket_name: &str, object_key: &str, config: RestoreObjectRequest) -> Result<OssRequest> {
+    let mut request = OssRequest::new()
         .method(RequestMethod::Post)
         .bucket(bucket_name)
         .object(object_key)

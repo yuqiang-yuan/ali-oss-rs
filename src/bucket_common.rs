@@ -6,7 +6,7 @@ use crate::{
         StorageClass, TransferAcceleration, Versioning,
     },
     error::{Error, Result},
-    request::{RequestBuilder, RequestMethod},
+    request::{OssRequest, RequestMethod},
 };
 
 /// Summary information of a bucket.
@@ -38,18 +38,21 @@ impl BucketSummary {
                     current_tag = String::from_utf8_lossy(e.local_name().as_ref()).into_owned();
                 }
 
-                Event::Text(e) => match current_tag.as_str() {
-                    "Name" => bucket.name = e.unescape()?.to_string(),
-                    "CreationDate" => bucket.creation_date = e.unescape()?.to_string(),
-                    "Location" => bucket.location = e.unescape()?.to_string(),
-                    "ExtranetEndpoint" => bucket.extranet_endpoint = e.unescape()?.to_string(),
-                    "IntranetEndpoint" => bucket.intranet_endpoint = e.unescape()?.to_string(),
-                    "Region" => bucket.region = e.unescape()?.to_string(),
-                    "StorageClass" => bucket.storage_class = StorageClass::try_from(e.unescape()?.to_string())?,
-                    "ResourceGroupId" => bucket.resource_group_id = Some(e.unescape()?.to_string()),
-                    "Comment" => bucket.comment = Some(e.unescape()?.to_string()),
-                    _ => {}
-                },
+                Event::Text(e) => {
+                    let s = e.unescape()?.trim().to_string();
+                    match current_tag.as_str() {
+                        "Name" => bucket.name = s,
+                        "CreationDate" => bucket.creation_date = s,
+                        "Location" => bucket.location = s,
+                        "ExtranetEndpoint" => bucket.extranet_endpoint = s,
+                        "IntranetEndpoint" => bucket.intranet_endpoint = s,
+                        "Region" => bucket.region = s,
+                        "StorageClass" => bucket.storage_class = StorageClass::try_from(s)?,
+                        "ResourceGroupId" => bucket.resource_group_id = if s.is_empty() { None } else { Some(s) },
+                        "Comment" => bucket.comment = if s.is_empty() { None } else { Some(s) },
+                        _ => {}
+                    }
+                }
 
                 Event::End(e) => {
                     current_tag.clear();
@@ -150,35 +153,32 @@ impl BucketDetail {
                     }
                 },
 
-                Event::Text(e) => match current_tag.as_str() {
-                    "Name" => bucket.name = e.unescape()?.to_string(),
-                    "CreationDate" => bucket.creation_date = e.unescape()?.to_string(),
-                    "Location" => bucket.location = e.unescape()?.to_string(),
-                    "ExtranetEndpoint" => bucket.extranet_endpoint = e.unescape()?.to_string(),
-                    "IntranetEndpoint" => bucket.intranet_endpoint = e.unescape()?.to_string(),
-                    "Region" => bucket.region = e.unescape()?.to_string(),
-                    "StorageClass" => bucket.storage_class = StorageClass::try_from(e.unescape()?.to_string())?,
-                    "ResourceGroupId" => bucket.resource_group_id = Some(e.unescape()?.to_string()),
-                    "Comment" => bucket.comment = Some(e.unescape()?.to_string()),
-                    "AccessMonitor" => bucket.access_monitor = AccessMonitor::try_from(e.unescape()?.to_string())?,
-                    "DataRedundancyType" => bucket.data_redundancy_type = DataRedundancyType::try_from(e.unescape()?.to_string())?,
-                    "CrossRegionReplication" => bucket.cross_region_acceleration = CrossRegionReplication::try_from(e.unescape()?.to_string())?,
-                    "TransferAcceleration" => bucket.transfer_acceleration = TransferAcceleration::try_from(e.unescape()?.to_string())?,
-                    "Grant" if tags.get(tags.len() - 2) == Some(&"AccessControlList".to_string()) => {
-                        bucket.access_control_list.push(Acl::try_from(e.unescape()?.to_string())?)
+                Event::Text(e) => {
+                    let s = e.unescape()?.trim().to_string();
+                    match current_tag.as_str() {
+                        "Name" => bucket.name = s,
+                        "CreationDate" => bucket.creation_date = s,
+                        "Location" => bucket.location = s,
+                        "ExtranetEndpoint" => bucket.extranet_endpoint = s,
+                        "IntranetEndpoint" => bucket.intranet_endpoint = s,
+                        "Region" => bucket.region = s,
+                        "StorageClass" => bucket.storage_class = StorageClass::try_from(s)?,
+                        "ResourceGroupId" => bucket.resource_group_id = if s.is_empty() { None } else { Some(s) },
+                        "Comment" => bucket.comment = if s.is_empty() { None } else { Some(s) },
+                        "AccessMonitor" => bucket.access_monitor = AccessMonitor::try_from(s)?,
+                        "DataRedundancyType" => bucket.data_redundancy_type = DataRedundancyType::try_from(s)?,
+                        "CrossRegionReplication" => bucket.cross_region_acceleration = CrossRegionReplication::try_from(s)?,
+                        "TransferAcceleration" => bucket.transfer_acceleration = TransferAcceleration::try_from(s)?,
+                        "Grant" if tags.get(tags.len() - 2) == Some(&"AccessControlList".to_string()) => bucket.access_control_list.push(Acl::try_from(s)?),
+                        "SSEAlgorithm" if tags.get(tags.len() - 2) == Some(&"ServerSideEncryptionRule".to_string()) => sse_algorithm = s,
+                        "KMSMasterKeyID" if tags.get(tags.len() - 2) == Some(&"ServerSideEncryptionRule".to_string()) => kms_master_key_id = s,
+                        "KMSDataEncryption" if tags.get(tags.len() - 2) == Some(&"ServerSideEncryptionRule".to_string()) => kms_data_encryption = s,
+                        "BlockPublicAccess" => bucket.block_public_access = e.unescape()? == "true",
+                        "LogBucket" => bucket.bucket_policy.log_bucket = s,
+                        "LogPrefix" => bucket.bucket_policy.log_prefix = s,
+                        _ => {}
                     }
-                    "SSEAlgorithm" if tags.get(tags.len() - 2) == Some(&"ServerSideEncryptionRule".to_string()) => sse_algorithm = e.unescape()?.to_string(),
-                    "KMSMasterKeyID" if tags.get(tags.len() - 2) == Some(&"ServerSideEncryptionRule".to_string()) => {
-                        kms_master_key_id = e.unescape()?.to_string()
-                    }
-                    "KMSDataEncryption" if tags.get(tags.len() - 2) == Some(&"ServerSideEncryptionRule".to_string()) => {
-                        kms_data_encryption = e.unescape()?.to_string()
-                    }
-                    "BlockPublicAccess" => bucket.block_public_access = e.unescape()? == "true",
-                    "LogBucket" => bucket.bucket_policy.log_bucket = e.unescape()?.to_string(),
-                    "LogPrefix" => bucket.bucket_policy.log_prefix = e.unescape()?.to_string(),
-                    _ => {}
-                },
+                }
 
                 Event::End(e) => {
                     current_tag.clear();
@@ -198,8 +198,8 @@ impl BucketDetail {
         } else {
             bucket.server_side_encryption_rule = Some(ServerSideEncryptionRule {
                 sse_algorithm: ServerSideEncryptionAlgorithm::try_from(&sse_algorithm)?,
-                kms_master_key_id: Some(kms_master_key_id),
-                kms_data_encryption: Some(kms_data_encryption),
+                kms_master_key_id: if kms_master_key_id.is_empty() { None } else { Some(kms_master_key_id) },
+                kms_data_encryption: if kms_data_encryption.is_empty() { None } else { Some(kms_data_encryption) },
             });
         }
 
@@ -222,7 +222,7 @@ pub struct ListBucketsResult {
     pub prefix: Option<String>,
     pub marker: Option<String>,
     pub max_keys: Option<String>,
-    pub is_truncated: Option<bool>,
+    pub is_truncated: bool,
     pub next_marker: Option<String>,
     pub owner: Owner,
     pub buckets: Vec<BucketSummary>,
@@ -255,14 +255,17 @@ impl ListBucketsResult {
                     }
                 },
 
-                Event::Text(e) => match current_tag.as_str() {
-                    "Prefix" => ret.prefix = Some(e.unescape()?.to_string()),
-                    "Marker" => ret.marker = Some(e.unescape()?.to_string()),
-                    "MaxKeys" => ret.max_keys = Some(e.unescape()?.to_string()),
-                    "IsTruncated" => ret.is_truncated = Some(e.unescape()? == "true"),
-                    "NextMarker" => ret.next_marker = Some(e.unescape()?.to_string()),
-                    _ => {}
-                },
+                Event::Text(e) => {
+                    let s = e.unescape()?.trim().to_string();
+                    match current_tag.as_str() {
+                        "Prefix" => ret.prefix = if s.is_empty() { None } else { Some(s) },
+                        "Marker" => ret.marker = if s.is_empty() { None } else { Some(s) },
+                        "MaxKeys" => ret.max_keys = if s.is_empty() { None } else { Some(s) },
+                        "IsTruncated" => ret.is_truncated = s == "true",
+                        "NextMarker" => ret.next_marker = if s.is_empty() { None } else { Some(s) },
+                        _ => {}
+                    }
+                }
 
                 Event::End(_) => {
                     current_tag.clear();
@@ -339,7 +342,7 @@ pub(crate) fn extract_bucket_location(xml: &str) -> Result<String> {
             Event::Start(t) => tag = String::from_utf8_lossy(t.local_name().as_ref()).to_string(),
             Event::Text(s) => {
                 if tag == "LocationConstraint" {
-                    location = s.unescape()?.to_string();
+                    location = s.unescape()?.trim().to_string();
                 }
             }
             Event::End(_) => tag.clear(),
@@ -392,28 +395,31 @@ impl BucketStat {
             match reader.read_event()? {
                 Event::Eof => break,
                 Event::Start(t) => tag = String::from_utf8_lossy(t.local_name().as_ref()).to_string(),
-                Event::Text(s) => match tag.as_str() {
-                    "Storage" => data.storage = s.unescape()?.to_string().parse()?,
-                    "ObjectCount" => data.object_count = s.unescape()?.to_string().parse()?,
-                    "MultipartUploadCount" => data.multipart_upload_count = s.unescape()?.to_string().parse()?,
-                    "LiveChannelCount" => data.live_channel_count = s.unescape()?.to_string().parse()?,
-                    "LastModifiedTime" => data.last_modified_time = s.unescape()?.to_string().parse()?,
-                    "StandardStorage" => data.standard_storage = s.unescape()?.to_string().parse()?,
-                    "StandardObjectCount" => data.standard_object_count = s.unescape()?.to_string().parse()?,
-                    "InfrequentAccessStorage" => data.infrequent_access_storage = s.unescape()?.to_string().parse()?,
-                    "InfrequentAccessRealStorage" => data.infrequent_access_real_storage = s.unescape()?.to_string().parse()?,
-                    "InfrequentAccessObjectCount" => data.infrequent_access_object_count = s.unescape()?.to_string().parse()?,
-                    "ArchiveStorage" => data.archive_storage = s.unescape()?.to_string().parse()?,
-                    "ArchiveRealStorage" => data.archive_real_storage = s.unescape()?.to_string().parse()?,
-                    "ArchiveObjectCount" => data.archive_object_count = s.unescape()?.to_string().parse()?,
-                    "ColdArchiveStorage" => data.cold_archive_storage = s.unescape()?.to_string().parse()?,
-                    "ColdArchiveRealStorage" => data.cold_archive_real_storage = s.unescape()?.to_string().parse()?,
-                    "ColdArchiveObjectCount" => data.cold_archive_object_count = s.unescape()?.to_string().parse()?,
-                    "DeepColdArchiveStorage" => data.deep_cold_archive_storage = s.unescape()?.to_string().parse()?,
-                    "DeepColdArchiveRealStorage" => data.deep_cold_archive_real_storage = s.unescape()?.to_string().parse()?,
-                    "DeepColdArchiveObjectCount" => data.deep_cold_archive_object_count = s.unescape()?.to_string().parse()?,
-                    _ => {}
-                },
+                Event::Text(text) => {
+                    let s = text.unescape()?.trim().to_string();
+                    match tag.as_str() {
+                        "Storage" => data.storage = s.parse()?,
+                        "ObjectCount" => data.object_count = s.parse()?,
+                        "MultipartUploadCount" => data.multipart_upload_count = s.parse()?,
+                        "LiveChannelCount" => data.live_channel_count = s.parse()?,
+                        "LastModifiedTime" => data.last_modified_time = s.parse()?,
+                        "StandardStorage" => data.standard_storage = s.parse()?,
+                        "StandardObjectCount" => data.standard_object_count = s.parse()?,
+                        "InfrequentAccessStorage" => data.infrequent_access_storage = s.parse()?,
+                        "InfrequentAccessRealStorage" => data.infrequent_access_real_storage = s.parse()?,
+                        "InfrequentAccessObjectCount" => data.infrequent_access_object_count = s.parse()?,
+                        "ArchiveStorage" => data.archive_storage = s.parse()?,
+                        "ArchiveRealStorage" => data.archive_real_storage = s.parse()?,
+                        "ArchiveObjectCount" => data.archive_object_count = s.parse()?,
+                        "ColdArchiveStorage" => data.cold_archive_storage = s.parse()?,
+                        "ColdArchiveRealStorage" => data.cold_archive_real_storage = s.parse()?,
+                        "ColdArchiveObjectCount" => data.cold_archive_object_count = s.parse()?,
+                        "DeepColdArchiveStorage" => data.deep_cold_archive_storage = s.parse()?,
+                        "DeepColdArchiveRealStorage" => data.deep_cold_archive_real_storage = s.parse()?,
+                        "DeepColdArchiveObjectCount" => data.deep_cold_archive_object_count = s.parse()?,
+                        _ => {}
+                    }
+                }
                 Event::End(_) => tag.clear(),
                 _ => {}
             }
@@ -459,16 +465,19 @@ impl ObjectSummary {
                     b"Owner" => data.owner = Some(Owner::from_xml_reader(reader)?),
                     _ => tag = String::from_utf8_lossy(t.local_name().as_ref()).to_string(),
                 },
-                Event::Text(s) => match tag.as_str() {
-                    "Key" => data.key = s.unescape()?.to_string(),
-                    "LastModified" => data.last_modified = s.unescape()?.to_string(),
-                    "ETag" => data.etag = s.unescape()?.to_string(),
-                    "Type" => data.object_type = ObjectType::try_from(s.unescape()?.to_string())?,
-                    "Size" => data.size = s.unescape()?.to_string().parse()?,
-                    "StorageClass" => data.storage_class = StorageClass::try_from(s.unescape()?.to_string())?,
-                    "RestoreInfo" => data.restore_info = Some(s.unescape()?.to_string()),
-                    _ => {}
-                },
+                Event::Text(text) => {
+                    let s = text.unescape()?.trim().to_string();
+                    match tag.as_str() {
+                        "Key" => data.key = s,
+                        "LastModified" => data.last_modified = s,
+                        "ETag" => data.etag = s,
+                        "Type" => data.object_type = ObjectType::try_from(s)?,
+                        "Size" => data.size = s.parse()?,
+                        "StorageClass" => data.storage_class = StorageClass::try_from(s)?,
+                        "RestoreInfo" => data.restore_info = if s.is_empty() { None } else { Some(s) },
+                        _ => {}
+                    }
+                }
                 Event::End(t) => {
                     if t.local_name().as_ref() == b"Contents" {
                         break;
@@ -518,26 +527,28 @@ impl ListObjectsResult {
                         tags.push(tag.clone());
                     }
                 },
-                Event::Text(s) => match tag.as_str() {
-                    "Name" => data.name = s.unescape()?.to_string(),
-                    "StartAfter" => data.start_after = Some(s.unescape()?.to_string()),
-                    "MaxKeys" => data.max_keys = s.unescape()?.to_string().parse()?,
-                    "Delimiter" => data.delimiter = s.unescape()?.to_string(),
-                    "IsTruncated" => data.is_truncated = s.unescape()? == "true",
-                    "KeyCount" => data.key_count = s.unescape()?.to_string().parse()?,
-                    "ContinuationToken" => data.continuation_token = Some(s.unescape()?.to_string()),
-                    "NextContinuationToken" => data.next_continuation_token = Some(s.unescape()?.to_string()),
-                    "Prefix" => {
-                        // there 2 elements named `Prefix`, one is under root element, the other is `root/CommPrefixes`
-                        let prefix = s.unescape()?.to_string();
-                        if tags.len() == 2 {
-                            data.prefix = prefix;
-                        } else if tags.len() == 3 {
-                            data.common_prefixes.push(prefix);
+                Event::Text(text) => {
+                    let s = text.unescape()?.trim().to_string();
+                    match tag.as_str() {
+                        "Name" => data.name = s,
+                        "StartAfter" => data.start_after = if s.is_empty() { None } else { Some(s) },
+                        "MaxKeys" => data.max_keys = s.parse()?,
+                        "Delimiter" => data.delimiter = s,
+                        "IsTruncated" => data.is_truncated = s == "true",
+                        "KeyCount" => data.key_count = s.parse()?,
+                        "ContinuationToken" => data.continuation_token = if s.is_empty() { None } else { Some(s) },
+                        "NextContinuationToken" => data.next_continuation_token = if s.is_empty() { None } else { Some(s) },
+                        "Prefix" => {
+                            // there 2 elements named `Prefix`, one is under root element, the other is `root/CommPrefixes`
+                            if tags.len() == 2 {
+                                data.prefix = s;
+                            } else if tags.len() == 3 {
+                                data.common_prefixes.push(s);
+                            }
                         }
+                        _ => {}
                     }
-                    _ => {}
-                },
+                }
                 Event::End(_) => {
                     tags.pop();
                     tag.clear();
@@ -631,10 +642,10 @@ impl ListObjectsOptionsBuilder {
     }
 }
 
-pub(crate) fn build_put_bucket_request(bucket_name: &str, config: &PutBucketConfiguration, options: &Option<PutBucketOptions>) -> Result<RequestBuilder> {
+pub(crate) fn build_put_bucket_request(bucket_name: &str, config: &PutBucketConfiguration, options: &Option<PutBucketOptions>) -> Result<OssRequest> {
     let xml = config.to_xml()?;
 
-    let mut request = crate::request::RequestBuilder::new()
+    let mut request = crate::request::OssRequest::new()
         .method(RequestMethod::Put)
         .bucket(bucket_name)
         .content_type(common::MIME_TYPE_XML)
@@ -665,8 +676,8 @@ pub(crate) fn build_put_bucket_request(bucket_name: &str, config: &PutBucketConf
     Ok(request)
 }
 
-pub(crate) fn build_list_buckets_request(options: &Option<ListBucketsOptions>) -> RequestBuilder {
-    let mut request = RequestBuilder::new();
+pub(crate) fn build_list_buckets_request(options: &Option<ListBucketsOptions>) -> OssRequest {
+    let mut request = OssRequest::new();
 
     if let Some(opt) = options {
         if let Some(prefix) = &opt.prefix {
@@ -686,8 +697,8 @@ pub(crate) fn build_list_buckets_request(options: &Option<ListBucketsOptions>) -
     request
 }
 
-pub(crate) fn build_list_objects_request(bucket_name: &str, options: &Option<ListObjectsOptions>) -> Result<RequestBuilder> {
-    let mut request = RequestBuilder::new().method(RequestMethod::Get).bucket(bucket_name).add_query("list-type", "2");
+pub(crate) fn build_list_objects_request(bucket_name: &str, options: &Option<ListObjectsOptions>) -> Result<OssRequest> {
+    let mut request = OssRequest::new().method(RequestMethod::Get).bucket(bucket_name).add_query("list-type", "2");
 
     if let Some(options) = options {
         if let Some(c) = options.delimiter {
