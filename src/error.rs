@@ -17,8 +17,8 @@ use thiserror::Error;
 // </Error>
 // ```
 #[derive(Debug, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct ErrorResponse {
     pub code: String,
     pub message: String,

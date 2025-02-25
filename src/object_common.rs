@@ -12,27 +12,27 @@ use crate::{
 };
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
 pub enum ContentEncoding {
     /// 表示 Object 未经过压缩或编码
     #[default]
-    #[cfg_attr(feature = "serde", serde(rename = "identity"))]
+    #[cfg_attr(feature = "serde-support", serde(rename = "identity"))]
     Identity,
 
     /// 表示 Object 采用 Lempel-Ziv（LZ77） 压缩算法以及 32 位 CRC 校验的编码方式。
-    #[cfg_attr(feature = "serde", serde(rename = "gzip"))]
+    #[cfg_attr(feature = "serde-support", serde(rename = "gzip"))]
     Gzip,
 
     /// 表示 Object 采用 zlib 结构和 deflate 压缩算法的编码方式。
-    #[cfg_attr(feature = "serde", serde(rename = "deflate"))]
+    #[cfg_attr(feature = "serde-support", serde(rename = "deflate"))]
     Deflate,
 
     /// 表示 Object 采用 Lempel-Ziv-Welch（LZW） 压缩算法的编码方式。
-    #[cfg_attr(feature = "serde", serde(rename = "compress"))]
+    #[cfg_attr(feature = "serde-support", serde(rename = "compress"))]
     Compress,
 
     /// 表示 Object 采用 Brotli 压缩算法的编码方式。
-    #[cfg_attr(feature = "serde", serde(rename = "br"))]
+    #[cfg_attr(feature = "serde-support", serde(rename = "br"))]
     Brotli,
 }
 
@@ -87,8 +87,8 @@ impl TryFrom<String> for ContentEncoding {
 ///
 /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
 #[derive(Debug, Clone, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct PutObjectOptions {
     /// 文件的 mime_type。如果不指定，则从文件名猜测。如果猜测不到，则使用 application/octet-stream
     /// 如果是直接从字节数组创建 Object 的，则不会猜测这个值，建议显式指定
@@ -655,8 +655,8 @@ pub(crate) fn build_put_object_request(
 ///
 /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getobjectmeta>
 #[derive(Debug, Clone, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct GetObjectMetadataOptions {
     pub version_id: Option<String>,
 }
@@ -665,8 +665,8 @@ pub struct GetObjectMetadataOptions {
 ///
 /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/headobject>
 #[derive(Debug, Clone, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct HeadObjectOptions {
     pub version_id: Option<String>,
     pub if_modified_since: Option<String>,
@@ -737,8 +737,8 @@ impl Default for HeadObjectOptionsBuilder {
 }
 
 #[derive(Debug, Clone, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct ObjectMetadata {
     pub request_id: String,
     pub content_length: u64,
@@ -879,8 +879,8 @@ impl From<HashMap<String, String>> for ObjectMetadata {
 ///
 /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/copyobject>
 #[derive(Debug, Clone, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct CopyObjectOptions {
     /// 指定 CopyObject 操作时是否覆盖同名目标 Object。
     /// 当目标 Bucket 处于已开启或已暂停版本控制状态时，`x-oss-forbid-overwrite` 请求 Header 设置无效，即允许覆盖同名Object。
@@ -1063,8 +1063,8 @@ impl Default for CopyObjectOptionsBuilder {
 
 /// Options for deleting object
 #[derive(Debug, Clone, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct DeleteObjectOptions {
     pub version_id: Option<String>,
 }
@@ -1283,11 +1283,11 @@ pub(crate) fn build_head_object_request(bucket_name: &str, object_key: &str, opt
 
 /// Put object result enumeration
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub enum PutObjectResult {
     /// This is response headers from aliyun oss api when you put object with no callback specified
-    #[cfg_attr(feature = "serde_camelcase", serde(rename = "apiResponseHeaders", rename_all = "camelCase"))]
+    #[cfg_attr(feature = "serde-camelcase", serde(rename = "apiResponseHeaders", rename_all = "camelCase"))]
     ApiResponseHeaders {
         request_id: String,
 
@@ -1306,7 +1306,7 @@ pub enum PutObjectResult {
 
     /// This is your callback response content string when you put object with callback specified.
     /// `.0` should be a valid JSON string.
-    #[cfg_attr(feature = "serde_camelcase", serde(rename = "callbackResponseContent"))]
+    #[cfg_attr(feature = "serde-camelcase", serde(rename = "callbackResponseContent"))]
     CallbackResponseContent(String),
 }
 
@@ -1342,8 +1342,8 @@ impl From<HashMap<String, String>> for AppendObjectResult {
 }
 
 #[derive(Debug, Clone, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct DeleteMultipleObjectsItem {
     pub key: String,
     pub version_id: Option<String>,
@@ -1353,8 +1353,8 @@ pub struct DeleteMultipleObjectsItem {
 ///
 /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/deletemultipleobjects>
 #[derive(Debug, Clone, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct DeleteMultipleObjectsRequest {
     pub quiet: Option<bool>,
 
@@ -1426,8 +1426,8 @@ pub enum DeleteMultipleObjectsConfig<'a, T: AsRef<str> + 'a> {
 }
 
 #[derive(Debug, Clone, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct DeleteMultipleObjectsResultItem {
     pub key: String,
     pub version_id: Option<String>,
@@ -1439,8 +1439,8 @@ pub struct DeleteMultipleObjectsResultItem {
 ///
 /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/deletemultipleobjects>
 #[derive(Debug, Clone, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct DeleteMultipleObjectsResult {
     pub items: Vec<DeleteMultipleObjectsResultItem>,
 }
@@ -1797,16 +1797,16 @@ impl<'a> CallbackBuilder<'a> {
 ///   - 高优先级（Expedited）：表示 12 小时内完成解冻。
 ///   - 标准（Standard，默认值）：表示48小时内完成解冻。
 #[derive(Debug, Copy, Clone, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
 pub enum RestoreJobTier {
-    #[cfg_attr(feature = "serde", serde(rename = "Standard"))]
+    #[cfg_attr(feature = "serde-support", serde(rename = "Standard"))]
     #[default]
     Standard,
 
-    #[cfg_attr(feature = "serde", serde(rename = "Expedited"))]
+    #[cfg_attr(feature = "serde-support", serde(rename = "Expedited"))]
     Expedited,
 
-    #[cfg_attr(feature = "serde", serde(rename = "Bulk"))]
+    #[cfg_attr(feature = "serde-support", serde(rename = "Bulk"))]
     Bulk,
 }
 
@@ -1857,8 +1857,8 @@ impl TryFrom<String> for RestoreJobTier {
 
 /// Restore object request
 #[derive(Debug, Clone, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct RestoreObjectRequest {
     /// 设置归档、冷归档以及深度冷归档类型 Object 的解冻天数。
     ///
@@ -1903,8 +1903,8 @@ impl RestoreObjectRequest {
 
 /// Restore object result
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct RestoreObjectResult {
     pub request_id: String,
     pub object_restore_priority: Option<String>,
@@ -1968,7 +1968,7 @@ mod test_object_common {
     }
 
     #[test]
-    #[cfg(feature = "serde")]
+    #[cfg(feature = "serde-support")]
     fn test_put_object_result_serde() {
         let ret = PutObjectResult::ApiResponseHeaders {
             request_id: "abc".to_string(),

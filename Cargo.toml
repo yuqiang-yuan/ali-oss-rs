@@ -4,6 +4,12 @@ version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
 rust-version = "1.56"
+description = "Aliyun OSS SDK for Rust"
+authors = ["Yuan YQ <yuqiang.yuan@163.com>"]
+repository = "https://github.com/yourusername/ali-oss-rs"
+documentation = "https://docs.rs/ali-oss-rs"
+keywords = ["aliyun", "oss", "storage", "cloud"]
+categories = ["api-bindings", "web-programming"]
 
 [dependencies]
 async-trait = "0.1.86"
@@ -45,7 +51,7 @@ blocking = ["reqwest/blocking"]
 rust-tls = ["reqwest/rustls-tls"]
 
 # Enable serialization/deserialization on data types. Usful if you are using this crate for backend API
-serde = []
+serde-support = []
 
 # Using camelCase for serialization/deserialization. default is `snake_case`
-serde_camelcase = ["serde"]
+serde-camelcase = ["serde-support"]

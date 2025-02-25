@@ -12,8 +12,8 @@ pub const SIGNATURE_VERSION: &str = "OSS4-HMAC-SHA256";
 pub const UNSIGNED_PAYLOAD: &str = "UNSIGNED-PAYLOAD";
 
 #[derive(Debug, Clone, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct Owner {
     pub id: String,
     pub display_name: String,
@@ -57,16 +57,16 @@ impl Owner {
 /// Represents the access control list (ACL) for an object in Aliyun OSS.
 ///
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
 pub enum Acl {
-    #[cfg_attr(feature = "serde", serde(rename = "public-read-write"))]
+    #[cfg_attr(feature = "serde-support", serde(rename = "public-read-write"))]
     PublicReadWrite,
 
-    #[cfg_attr(feature = "serde", serde(rename = "public-read"))]
+    #[cfg_attr(feature = "serde-support", serde(rename = "public-read"))]
     PublicRead,
 
     #[default]
-    #[cfg_attr(feature = "serde", serde(rename = "private"))]
+    #[cfg_attr(feature = "serde-support", serde(rename = "private"))]
     Private,
 }
 
@@ -129,22 +129,22 @@ impl TryFrom<&String> for Acl {
 /// Represents the storage class for an object in Aliyun OSS.
 ///
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
 pub enum StorageClass {
     #[default]
-    #[cfg_attr(feature = "serde", serde(rename = "Standard"))]
+    #[cfg_attr(feature = "serde-support", serde(rename = "Standard"))]
     Standard,
 
-    #[cfg_attr(feature = "serde", serde(rename = "IA"))]
+    #[cfg_attr(feature = "serde-support", serde(rename = "IA"))]
     IA,
 
-    #[cfg_attr(feature = "serde", serde(rename = "Archive"))]
+    #[cfg_attr(feature = "serde-support", serde(rename = "Archive"))]
     Archive,
 
-    #[cfg_attr(feature = "serde", serde(rename = "ColdArchive"))]
+    #[cfg_attr(feature = "serde-support", serde(rename = "ColdArchive"))]
     ColdArchive,
 
-    #[cfg_attr(feature = "serde", serde(rename = "DeepColdArchive"))]
+    #[cfg_attr(feature = "serde-support", serde(rename = "DeepColdArchive"))]
     DeepColdArchive,
 }
 
@@ -210,13 +210,13 @@ impl TryFrom<&String> for StorageClass {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
 pub enum DataRedundancyType {
     #[default]
-    #[cfg_attr(feature = "serde", serde(rename = "LRS"))]
+    #[cfg_attr(feature = "serde-support", serde(rename = "LRS"))]
     LRS,
 
-    #[cfg_attr(feature = "serde", serde(rename = "ZRS"))]
+    #[cfg_attr(feature = "serde-support", serde(rename = "ZRS"))]
     ZRS,
 }
 
@@ -284,13 +284,13 @@ pub struct KvPair {
 /// - `Disabled`
 ///
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
 pub enum OnOff {
-    #[cfg_attr(feature = "serde", serde(rename = "Enabled"))]
+    #[cfg_attr(feature = "serde-support", serde(rename = "Enabled"))]
     Enabled,
 
     #[default]
-    #[cfg_attr(feature = "serde", serde(rename = "Disabled"))]
+    #[cfg_attr(feature = "serde-support", serde(rename = "Disabled"))]
     Disabled,
 }
 
@@ -352,13 +352,13 @@ pub type AccessMonitor = OnOff;
 /// Versioning enumeration
 ///
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
 pub enum Versioning {
-    #[cfg_attr(feature = "serde", serde(rename = "Enabled"))]
+    #[cfg_attr(feature = "serde-support", serde(rename = "Enabled"))]
     Enabled,
 
     #[default]
-    #[cfg_attr(feature = "serde", serde(rename = "Suspended"))]
+    #[cfg_attr(feature = "serde-support", serde(rename = "Suspended"))]
     Suspended,
 }
 
@@ -412,16 +412,16 @@ impl TryFrom<&String> for Versioning {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
 pub enum ServerSideEncryptionAlgorithm {
     #[default]
-    #[cfg_attr(feature = "serde", serde(rename = "KMS"))]
+    #[cfg_attr(feature = "serde-support", serde(rename = "KMS"))]
     KMS,
 
-    #[cfg_attr(feature = "serde", serde(rename = "AES256"))]
+    #[cfg_attr(feature = "serde-support", serde(rename = "AES256"))]
     AES256,
 
-    #[cfg_attr(feature = "serde", serde(rename = "SM4"))]
+    #[cfg_attr(feature = "serde-support", serde(rename = "SM4"))]
     SM4,
 }
 
@@ -477,8 +477,8 @@ impl TryFrom<&String> for ServerSideEncryptionAlgorithm {
 }
 
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct ServerSideEncryptionRule {
     pub sse_algorithm: ServerSideEncryptionAlgorithm,
 
@@ -491,19 +491,19 @@ pub struct ServerSideEncryptionRule {
 /// Object type enumeration
 ///
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
 pub enum ObjectType {
     #[default]
-    #[cfg_attr(feature = "serde", serde(rename = "Normal"))]
+    #[cfg_attr(feature = "serde-support", serde(rename = "Normal"))]
     Normal,
 
-    #[cfg_attr(feature = "serde", serde(rename = "Multipart"))]
+    #[cfg_attr(feature = "serde-support", serde(rename = "Multipart"))]
     Multipart,
 
-    #[cfg_attr(feature = "serde", serde(rename = "Appendable"))]
+    #[cfg_attr(feature = "serde-support", serde(rename = "Appendable"))]
     Appendable,
 
-    #[cfg_attr(feature = "serde", serde(rename = "Symlink"))]
+    #[cfg_attr(feature = "serde-support", serde(rename = "Symlink"))]
     Symlink,
 }
 
@@ -556,17 +556,17 @@ impl TryFrom<&String> for ObjectType {
 
 /// How to apply metadata rule while coping object
 #[derive(Debug, Clone, Copy, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
 pub enum MetadataDirective {
     /// 复制源 Object 的元数据到目标 Object。
     /// OSS 不会复制源 Object 的 `x-oss-server-side-encryption` 属性配置到目标 Object。
     /// 目标 Object 的服务器端加密编码方式取决于当前拷贝操作是否指定了 `x-oss-server-side-encryption`。
     #[default]
-    #[cfg_attr(feature = "serde", serde(rename = "COPY"))]
+    #[cfg_attr(feature = "serde-support", serde(rename = "COPY"))]
     Copy,
 
     /// 忽略源 Object 的元数据，直接采用请求中指定的元数据
-    #[cfg_attr(feature = "serde", serde(rename = "REPLACE"))]
+    #[cfg_attr(feature = "serde-support", serde(rename = "REPLACE"))]
     Replace,
 }
 
@@ -624,15 +624,15 @@ impl TryFrom<&String> for MetadataDirective {
 
 /// How to apply taggings rule while coping object
 #[derive(Debug, Clone, Copy, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
 pub enum TagDirective {
     /// 复制源 Object 的标签数据到目标 Object。
     #[default]
-    #[cfg_attr(feature = "serde", serde(rename = "Copy"))]
+    #[cfg_attr(feature = "serde-support", serde(rename = "Copy"))]
     Copy,
 
     /// 忽略源 Object 的对象标签，直接采用请求中指定的对象标签。
-    #[cfg_attr(feature = "serde", serde(rename = "Replace"))]
+    #[cfg_attr(feature = "serde-support", serde(rename = "Replace"))]
     Replace,
 }
 

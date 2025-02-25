@@ -12,8 +12,8 @@ use crate::{
 
 /// Summary information of a bucket.
 #[derive(Debug, Clone, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct BucketSummary {
     pub name: String,
     pub location: String,
@@ -73,8 +73,8 @@ impl BucketSummary {
 
 /// Bucket policy
 #[derive(Debug, Clone, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct BucketPolicy {
     pub log_bucket: String,
     pub log_prefix: String,
@@ -82,8 +82,8 @@ pub struct BucketPolicy {
 
 /// Bucket detail information
 #[derive(Debug, Clone, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct BucketDetail {
     pub name: String,
     pub location: String,
@@ -217,8 +217,8 @@ impl BucketDetail {
 /// - `is_truncated`
 /// - `next_marker`
 #[derive(Debug, Clone, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct ListBucketsResult {
     pub prefix: Option<String>,
     pub marker: Option<String>,
@@ -281,8 +281,8 @@ impl ListBucketsResult {
 }
 
 #[derive(Default, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct ListBucketsOptions {
     pub prefix: Option<String>,
     pub marker: Option<String>,
@@ -291,8 +291,8 @@ pub struct ListBucketsOptions {
 }
 
 #[derive(Default, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct PutBucketConfiguration {
     pub storage_class: Option<StorageClass>,
     pub data_redundancy_type: Option<DataRedundancyType>,
@@ -324,8 +324,8 @@ impl PutBucketConfiguration {
 }
 
 #[derive(Default, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct PutBucketOptions {
     pub acl: Option<Acl>,
     pub resource_group_id: Option<String>,
@@ -356,8 +356,8 @@ pub(crate) fn extract_bucket_location(xml: &str) -> Result<String> {
 
 /// Bucket statistics data. All statistical items are counted in bytes
 #[derive(Debug, Clone, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct BucketStat {
     pub storage: u64,
     pub object_count: u64,
@@ -432,8 +432,8 @@ impl BucketStat {
 
 /// Object summary data for list objects v2
 #[derive(Debug, Clone, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct ObjectSummary {
     pub key: String,
 
@@ -494,8 +494,8 @@ impl ObjectSummary {
 }
 
 #[derive(Debug, Clone, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct ListObjectsResult {
     pub name: String,
     pub prefix: String,
@@ -564,8 +564,8 @@ impl ListObjectsResult {
 
 /// Query options for listing objects in a bucket
 #[derive(Debug, Clone, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct ListObjectsOptions {
     /// 对 Object 名字进行分组的字符。所有名字包含指定的前缀且第一次出现 `delimiter` 字符之间的 Object 作为一组元素 `common_prefixes`
     pub delimiter: Option<char>,

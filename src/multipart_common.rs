@@ -17,8 +17,8 @@ pub type InitiateMultipartUploadOptions = PutObjectOptions;
 
 /// Initiate mutlipart upload result
 #[derive(Debug, Clone, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct InitiateMultipartUploadResult {
     pub bucket: String,
     pub key: String,
@@ -55,8 +55,8 @@ impl InitiateMultipartUploadResult {
 
 /// Request data for upload part
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct UploadPartRequest {
     /// 每一个上传的 Part 都有一个标识它的号码（partNumber）。
     ///
@@ -86,8 +86,8 @@ impl UploadPartRequest {
 
 /// Upload part result.
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct UploadPartResult {
     pub request_id: String,
 
@@ -106,8 +106,8 @@ impl From<HashMap<String, String>> for UploadPartResult {
 
 /// Data required for upload part copy for copying object larger than 1GB
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct UploadPartCopyRequest {
     /// 每一个上传的 Part 都有一个标识它的号码（partNumber）。
     ///
@@ -142,8 +142,8 @@ impl UploadPartCopyRequest {
 
 /// Other options for upload part copy
 #[derive(Debug, Clone, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct UploadPartCopyOptions {
     /// 如果源 Object 开启了版本控制，这里可以指明版本，实现从 Object 的指定版本进行拷贝
     pub source_object_version_id: Option<String>,
@@ -208,8 +208,8 @@ impl UploadPartCopyOptionsBuilder {
 
 /// Result for upload part copy
 #[derive(Debug, Clone, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct UploadPartCopyResult {
     pub last_modified: String,
     pub etag: String,
@@ -244,8 +244,8 @@ impl UploadPartCopyResult {
 
 /// Request data for complete multipart upload
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct CompleteMultipartUploadRequest {
     pub upload_id: String,
     /// `.0` is the `part_number` while upload part,
@@ -289,8 +289,8 @@ impl CompleteMultipartUploadRequest {
 
 /// Request data for complete multipart upload
 #[derive(Debug, Clone, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct CompleteMultipartUploadResult {
     pub bucket: String,
     pub key: String,
@@ -327,8 +327,8 @@ impl CompleteMultipartUploadResult {
 
 /// query options for listing all multipart uploads which is initialized but not completed nor aborted.
 #[derive(Debug, Clone, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct ListMultipartUploadsOptions {
     /// 用于对 Object 名称进行分组的字符。所有名称包含指定的前缀且首次出现 delimiter 字符之间的 Object 作为一组元素 CommonPrefixes。
     pub delimiter: Option<char>,
@@ -392,8 +392,8 @@ impl ListMultipartUploadsOptionsBuilder {
 }
 
 #[derive(Debug, Clone, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct ListMultipartUploadsResultItem {
     pub key: String,
     pub upload_id: String,
@@ -435,8 +435,8 @@ impl ListMultipartUploadsResultItem {
 }
 
 #[derive(Debug, Clone, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct ListMultipartUploadsResult {
     pub bucket: String,
     pub prefix: Option<String>,
@@ -499,8 +499,8 @@ impl ListMultipartUploadsResult {
 }
 
 #[derive(Debug, Clone, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct ListPartsOptions {
     /// Maximum parts number in response data. Valida data range: `[1, 1000]`
     pub max_parts: Option<u32>,
@@ -510,8 +510,8 @@ pub struct ListPartsOptions {
 }
 
 #[derive(Debug, Clone, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct ListPartsResultItem {
     pub etag: String,
     pub part_number: u32,
@@ -553,8 +553,8 @@ impl ListPartsResultItem {
 }
 
 #[derive(Debug, Clone, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde_camelcase", serde(rename_all = "camelCase"))]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct ListPartsResult {
     pub bucket: String,
     pub key: String,
