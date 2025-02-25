@@ -46,9 +46,15 @@ impl BucketOperations for Client {
     }
 
     fn get_bucket_info<S: AsRef<str>>(&self, bucket_name: S) -> Result<BucketDetail> {
+        let bucket_name = bucket_name.as_ref();
+
+        if !validate_bucket_name(bucket_name) {
+            return Err(Error::Other(format!("invalid bucket name: {}", bucket_name)));
+        }
+
         let request_builder = OssRequest::new()
             .method(RequestMethod::Get)
-            .bucket(bucket_name.as_ref())
+            .bucket(bucket_name)
             .add_query("bucketInfo", "");
 
         let (_, content) = self.do_request::<String>(request_builder)?;
@@ -57,9 +63,15 @@ impl BucketOperations for Client {
     }
 
     fn get_bucket_location<S: AsRef<str>>(&self, bucket_name: S) -> Result<String> {
+        let bucket_name = bucket_name.as_ref();
+
+        if !validate_bucket_name(bucket_name) {
+            return Err(Error::Other(format!("invalid bucket name: {}", bucket_name)));
+        }
+
         let request_builder = OssRequest::new()
             .method(RequestMethod::Get)
-            .bucket(bucket_name.as_ref())
+            .bucket(bucket_name)
             .add_query("location", "");
 
         let (_, content) = self.do_request::<String>(request_builder)?;
@@ -68,7 +80,13 @@ impl BucketOperations for Client {
     }
 
     fn get_bucket_stat<S: AsRef<str>>(&self, bucket_name: S) -> Result<BucketStat> {
-        let request_builder = OssRequest::new().method(RequestMethod::Get).bucket(bucket_name.as_ref()).add_query("stat", "");
+        let bucket_name = bucket_name.as_ref();
+
+        if !validate_bucket_name(bucket_name) {
+            return Err(Error::Other(format!("invalid bucket name: {}", bucket_name)));
+        }
+
+        let request_builder = OssRequest::new().method(RequestMethod::Get).bucket(bucket_name).add_query("stat", "");
 
         let (_, content) = self.do_request::<String>(request_builder)?;
 
@@ -76,7 +94,13 @@ impl BucketOperations for Client {
     }
 
     fn list_objects<S: AsRef<str>>(&self, bucket_name: S, options: Option<ListObjectsOptions>) -> Result<ListObjectsResult> {
-        let request = build_list_objects_request(bucket_name.as_ref(), &options)?;
+        let bucket_name = bucket_name.as_ref();
+
+        if !validate_bucket_name(bucket_name) {
+            return Err(Error::Other(format!("invalid bucket name: {}", bucket_name)));
+        }
+
+        let request = build_list_objects_request(bucket_name, &options)?;
 
         let (_, content) = self.do_request::<String>(request)?;
 
@@ -84,7 +108,13 @@ impl BucketOperations for Client {
     }
 
     fn delete_bucket<S: AsRef<str>>(&self, bucket_name: S) -> Result<()> {
-        let request_builder = OssRequest::new().method(RequestMethod::Delete).bucket(bucket_name.as_ref());
+        let bucket_name = bucket_name.as_ref();
+
+        if !validate_bucket_name(bucket_name) {
+            return Err(Error::Other(format!("invalid bucket name: {}", bucket_name)));
+        }
+
+        let request_builder = OssRequest::new().method(RequestMethod::Delete).bucket(bucket_name);
 
         self.do_request::<()>(request_builder)?;
 

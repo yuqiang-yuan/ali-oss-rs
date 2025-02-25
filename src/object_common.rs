@@ -4,12 +4,7 @@ use base64::prelude::{Engine, BASE64_STANDARD};
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 
 use crate::{
-    common::{self, build_tag_string, Acl, MetadataDirective, ObjectType, ServerSideEncryptionAlgorithm, StorageClass, TagDirective, MIME_TYPE_XML},
-    error::Error,
-    Result,
-    request::{OssRequest, RequestMethod},
-    util::{sanitize_etag, validate_meta_key, validate_object_key, validate_tag_key, validate_tag_value},
-    RequestBody,
+    common::{self, build_tag_string, Acl, MetadataDirective, ObjectType, ServerSideEncryptionAlgorithm, StorageClass, TagDirective, MIME_TYPE_XML}, error::Error, request::{OssRequest, RequestMethod}, util::{sanitize_etag, validate_bucket_name, validate_meta_key, validate_object_key, validate_tag_key, validate_tag_value}, RequestBody, Result
 };
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
@@ -514,8 +509,12 @@ pub(crate) fn build_put_object_request(
     request_body: RequestBody,
     options: &Option<PutObjectOptions>,
 ) -> Result<OssRequest> {
-    if bucket_name.is_empty() || object_key.is_empty() {
-        return Err(Error::Other("bucket_name and object_key cannot be empty".to_string()));
+    if !validate_bucket_name(bucket_name) {
+        return Err(Error::Other(format!("invalid bucket name: {}", bucket_name)));
+    }
+
+    if !validate_object_key(object_key) {
+        return Err(Error::Other(format!("invalid object key: {}", object_key)));
     }
 
     // check for metadata and tags
@@ -1079,9 +1078,23 @@ pub(crate) fn build_copy_object_request(
     dest_object_key: &str,
     options: &Option<CopyObjectOptions>,
 ) -> Result<OssRequest> {
-    if !validate_object_key(dest_object_key) {
-        return Err(Error::Other(format!("invalid object key: {}", dest_object_key)));
+
+    if !validate_bucket_name(source_bucket_name) {
+        return Err(Error::Other(format!("invalid source bucket name: {}", source_bucket_name)));
     }
+
+    if !validate_object_key(source_object_key) {
+        return Err(Error::Other(format!("invalid source object key: {}", source_object_key)));
+    }
+
+    if !validate_bucket_name(dest_bucket_name) {
+        return Err(Error::Other(format!("invalid destination bucket name: {}", dest_bucket_name)));
+    }
+
+    if !validate_object_key(dest_object_key) {
+        return Err(Error::Other(format!("invalid destination object key: {}", dest_object_key)));
+    }
+
 
     let mut request = OssRequest::new()
         .method(RequestMethod::Put)
@@ -1166,7 +1179,15 @@ pub(crate) fn build_copy_object_request(
     Ok(request)
 }
 
-pub(crate) fn build_get_object_request(bucket_name: &str, object_key: &str, options: &Option<GetObjectOptions>) -> OssRequest {
+pub(crate) fn build_get_object_request(bucket_name: &str, object_key: &str, options: &Option<GetObjectOptions>) -> Result<OssRequest> {
+    if !validate_bucket_name(bucket_name) {
+        return Err(Error::Other(format!("invalid bucket name: {}", bucket_name)));
+    }
+
+    if !validate_object_key(object_key) {
+        return Err(Error::Other(format!("invalid object key: {}", object_key)));
+    }
+
     let mut request = OssRequest::new().method(RequestMethod::Get).bucket(bucket_name).object(object_key);
 
     if let Some(options) = options {
@@ -1219,10 +1240,18 @@ pub(crate) fn build_get_object_request(bucket_name: &str, object_key: &str, opti
         }
     }
 
-    request
+    Ok(request)
 }
 
-pub(crate) fn build_head_object_request(bucket_name: &str, object_key: &str, options: &Option<HeadObjectOptions>) -> OssRequest {
+pub(crate) fn build_head_object_request(bucket_name: &str, object_key: &str, options: &Option<HeadObjectOptions>) -> Result<OssRequest> {
+    if !validate_bucket_name(bucket_name) {
+        return Err(Error::Other(format!("invalid bucket name: {}", bucket_name)));
+    }
+
+    if !validate_object_key(object_key) {
+        return Err(Error::Other(format!("invalid object key: {}", object_key)));
+    }
+
     let mut request = OssRequest::new().method(RequestMethod::Head).bucket(bucket_name).object(object_key);
 
     if let Some(options) = options {
@@ -1247,7 +1276,7 @@ pub(crate) fn build_head_object_request(bucket_name: &str, object_key: &str, opt
         }
     }
 
-    request
+    Ok(request)
 }
 
 /// Put object result enumeration
@@ -1462,6 +1491,10 @@ pub(crate) fn build_delete_multiple_objects_request<S>(bucket_name: &str, config
 where
     S: AsRef<str>,
 {
+    if !validate_bucket_name(bucket_name) {
+        return Err(Error::Other(format!("invalid bucket name: {}", bucket_name)));
+    }
+
     let mut request = OssRequest::new()
         .method(RequestMethod::Post)
         .bucket(bucket_name)
@@ -1887,6 +1920,14 @@ impl From<HashMap<String, String>> for RestoreObjectResult {
 }
 
 pub(crate) fn build_restore_object_request(bucket_name: &str, object_key: &str, config: RestoreObjectRequest) -> Result<OssRequest> {
+    if !validate_bucket_name(bucket_name) {
+        return Err(Error::Other(format!("invalid bucket name: {}", bucket_name)));
+    }
+
+    if !validate_object_key(object_key) {
+        return Err(Error::Other(format!("invalid object key: {}", object_key)));
+    }
+
     let mut request = OssRequest::new()
         .method(RequestMethod::Post)
         .bucket(bucket_name)

@@ -4,17 +4,12 @@ use base64::{prelude::BASE64_STANDARD, Engine};
 use reqwest::StatusCode;
 
 use crate::{
-    error::Error,
-    Result,
-    object_common::{
+    error::Error, object_common::{
         build_copy_object_request, build_delete_multiple_objects_request, build_get_object_request, build_head_object_request, build_put_object_request,
         build_restore_object_request, AppendObjectOptions, AppendObjectResult, CopyObjectOptions, CopyObjectResult, DeleteMultipleObjectsConfig,
         DeleteMultipleObjectsResult, DeleteObjectOptions, DeleteObjectResult, GetObjectMetadataOptions, GetObjectOptions, GetObjectResult, HeadObjectOptions,
         ObjectMetadata, PutObjectOptions, PutObjectResult, RestoreObjectRequest, RestoreObjectResult,
-    },
-    request::{OssRequest, RequestMethod},
-    util::validate_path,
-    RequestBody,
+    }, request::{OssRequest, RequestMethod}, util::{validate_bucket_name, validate_object_key, validate_path}, RequestBody, Result
 };
 
 use super::{BytesBody, Client};
@@ -410,7 +405,7 @@ impl ObjectOperations for Client {
             }
         }
 
-        let request = build_get_object_request(bucket_name, object_key, &options);
+        let request = build_get_object_request(bucket_name, object_key, &options)?;
 
         let (_, mut stream) = self.do_request::<BytesBody>(request)?;
 
@@ -453,6 +448,14 @@ impl ObjectOperations for Client {
     {
         let bucket_name = bucket_name.as_ref();
         let object_key = object_key.as_ref();
+
+        if !validate_bucket_name(bucket_name) {
+            return Err(Error::Other(format!("invalid bucket name: {}", bucket_name)));
+        }
+
+        if !validate_object_key(object_key) {
+            return Err(Error::Other(format!("invalid object key: {}", object_key)));
+        }
 
         let mut request = OssRequest::new()
             .method(RequestMethod::Head)
@@ -498,7 +501,7 @@ impl ObjectOperations for Client {
         let bucket_name = bucket_name.as_ref();
         let object_key = object_key.as_ref();
 
-        let request = build_head_object_request(bucket_name, object_key, &options);
+        let request = build_head_object_request(bucket_name, object_key, &options)?;
 
         let (headers, _) = self.do_request::<()>(request)?;
         Ok(ObjectMetadata::from(headers))
@@ -542,10 +545,21 @@ impl ObjectOperations for Client {
         S1: AsRef<str>,
         S2: AsRef<str>,
     {
+        let bucket_name = bucket_name.as_ref();
+        let object_key = object_key.as_ref();
+
+        if !validate_bucket_name(bucket_name) {
+            return Err(Error::Other(format!("invalid bucket name: {}", bucket_name)));
+        }
+
+        if !validate_object_key(object_key) {
+            return Err(Error::Other(format!("invalid object key: {}", object_key)));
+        }
+
         let mut request = OssRequest::new()
             .method(RequestMethod::Delete)
-            .bucket(bucket_name.as_ref())
-            .object(object_key.as_ref());
+            .bucket(bucket_name)
+            .object(object_key);
 
         if let Some(options) = options {
             if let Some(s) = options.version_id {
@@ -594,10 +608,21 @@ impl ObjectOperations for Client {
         S1: AsRef<str>,
         S2: AsRef<str>,
     {
+
+        let bucket_name = bucket_name.as_ref();
+        let object_key = object_key.as_ref();
+
+        if !validate_bucket_name(bucket_name) {
+            return Err(Error::Other(format!("invalid bucket name: {}", bucket_name)));
+        }
+
+        if !validate_object_key(object_key) {
+            return Err(Error::Other(format!("invalid object key: {}", object_key)));
+        }
         let request = OssRequest::new()
             .method(RequestMethod::Post)
-            .bucket(bucket_name.as_ref())
-            .object(object_key.as_ref())
+            .bucket(bucket_name)
+            .object(object_key)
             .add_query("cleanRestoredObject", "");
 
         let _ = self.do_request::<()>(request)?;
