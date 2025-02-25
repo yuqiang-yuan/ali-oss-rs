@@ -14,7 +14,7 @@ use crate::{
         ListPartsResult, UploadPartCopyOptions, UploadPartCopyRequest, UploadPartCopyResult, UploadPartRequest, UploadPartResult,
     },
     request::{OssRequest, RequestMethod},
-    util::validate_bucket_name,
+    util::{validate_bucket_name, validate_object_key},
     Client, RequestBody, Result,
 };
 
@@ -291,10 +291,25 @@ impl MultipartUploadsOperations for Client {
         S2: AsRef<str> + Send,
         S3: AsRef<str> + Send,
     {
+        let bucket_name = bucket_name.as_ref();
+        let object_key = object_key.as_ref();
+
+        if !validate_bucket_name(bucket_name) {
+            return Err(Error::Other(format!("invalid bucket name: {}", bucket_name)));
+        }
+
+        if !validate_object_key(object_key) {
+            return Err(Error::Other(format!("invalid object key: {}", object_key)));
+        }
+
+        if upload_id.as_ref().is_empty() {
+            return Err(Error::Other("invalid upload id: [empty]".to_string()));
+        }
+
         let request = OssRequest::new()
             .method(RequestMethod::Delete)
-            .bucket(bucket_name.as_ref())
-            .object(object_key.as_ref())
+            .bucket(bucket_name)
+            .object(object_key)
             .add_query("uploadId", upload_id);
 
         self.do_request::<()>(request).await?;

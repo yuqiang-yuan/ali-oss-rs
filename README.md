@@ -37,3 +37,4 @@ Aliyun Object Storage Service (OSS) is a massive, secure, cost-effective, and hi
   - URL with signature for `GET` request
   - Multipart uploads: from file with range, buffer and base64 string.
   - Multipart uplodds: list parts and abort multipart uploads
+  - Multipart uploads copy

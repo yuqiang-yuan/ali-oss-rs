@@ -588,7 +588,7 @@ impl ObjectOperations for Client {
             return Err(Error::Other(format!("invalid bucket name: {}", bucket_name)));
         }
 
-        if !validate_object_key(object_key.as_ref()) {
+        if !validate_object_key(object_key) {
             return Err(Error::Other(format!("invalid object key: {}", object_key)));
         }
 
