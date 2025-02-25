@@ -29,7 +29,7 @@ pub struct ErrorResponse {
 }
 
 impl ErrorResponse {
-    pub fn from_xml(xml_content: &str) -> Result<Self> {
+    pub fn from_xml(xml_content: &str) -> crate::Result<Self> {
         let mut reader = quick_xml::Reader::from_str(xml_content);
         let mut ret = Self::default();
 
@@ -112,5 +112,3 @@ pub enum Error {
     #[error("{0}")]
     Other(String),
 }
-
-pub type Result<T> = std::result::Result<T, self::Error>;

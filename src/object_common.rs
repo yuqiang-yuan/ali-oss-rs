@@ -5,7 +5,8 @@ use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 
 use crate::{
     common::{self, build_tag_string, Acl, MetadataDirective, ObjectType, ServerSideEncryptionAlgorithm, StorageClass, TagDirective, MIME_TYPE_XML},
-    error::{Error, Result},
+    error::Error,
+    Result,
     request::{OssRequest, RequestMethod},
     util::{sanitize_etag, validate_meta_key, validate_object_key, validate_tag_key, validate_tag_value},
     RequestBody,

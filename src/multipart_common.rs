@@ -6,7 +6,8 @@ use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 
 use crate::{
     common,
-    error::{Error, Result},
+    error::Error,
+    Result,
     object_common::{build_put_object_request, PutObjectOptions},
     request::{OssRequest, RequestMethod},
     util::{sanitize_etag, validate_bucket_name, validate_object_key},

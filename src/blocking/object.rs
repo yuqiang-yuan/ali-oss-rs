@@ -4,7 +4,8 @@ use base64::{prelude::BASE64_STANDARD, Engine};
 use reqwest::StatusCode;
 
 use crate::{
-    error::{Error, Result},
+    error::Error,
+    Result,
     object_common::{
         build_copy_object_request, build_delete_multiple_objects_request, build_get_object_request, build_head_object_request, build_put_object_request,
         build_restore_object_request, AppendObjectOptions, AppendObjectResult, CopyObjectOptions, CopyObjectResult, DeleteMultipleObjectsConfig,

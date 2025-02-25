@@ -6,7 +6,8 @@ use crate::{
         build_list_buckets_request, build_list_objects_request, build_put_bucket_request, extract_bucket_location, BucketDetail, BucketStat,
         ListBucketsOptions, ListBucketsResult, ListObjectsOptions, ListObjectsResult, PutBucketConfiguration, PutBucketOptions,
     },
-    error::{Error, Result},
+    error::Error,
+    Result,
     request::{OssRequest, RequestMethod},
     util::validate_bucket_name,
 };

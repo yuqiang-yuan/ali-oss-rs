@@ -5,7 +5,8 @@ use crate::{
         self, AccessMonitor, Acl, CrossRegionReplication, DataRedundancyType, ObjectType, Owner, ServerSideEncryptionAlgorithm, ServerSideEncryptionRule,
         StorageClass, TransferAcceleration, Versioning,
     },
-    error::{Error, Result},
+    error::Error,
+    Result,
     request::{OssRequest, RequestMethod},
 };
 

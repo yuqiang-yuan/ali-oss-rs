@@ -6,7 +6,8 @@ use async_trait::async_trait;
 use base64::{prelude::BASE64_STANDARD, Engine};
 
 use crate::{
-    error::{Error, Result},
+    error::Error,
+    Result,
     multipart_common::{
         build_complete_multipart_uploads_request, build_initiate_multipart_uploads_request, build_list_multipart_uploads_request, build_list_parts_request,
         build_upload_part_request, CompleteMultipartUploadRequest, CompleteMultipartUploadResult, InitiateMultipartUploadOptions,

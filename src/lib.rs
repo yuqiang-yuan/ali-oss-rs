@@ -20,7 +20,7 @@ use std::{collections::HashMap, pin::Pin, str::FromStr};
 
 use async_trait::async_trait;
 use bytes::Bytes;
-use error::{Error, ErrorResponse, Result};
+use error::{Error, ErrorResponse};
 use futures::{Stream, StreamExt};
 use request::RequestBody;
 use reqwest::{
@@ -35,6 +35,8 @@ use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio_util::codec::{BytesCodec, FramedRead};
 use url::Url;
 use util::{get_region_from_endpoint, hmac_sha256};
+
+pub type Result<T> = std::result::Result<T, crate::error::Error>;
 
 /// Builder for `Client`.
 #[derive(Debug, Default)]
