@@ -1,6 +1,6 @@
 # Aliyun OSS Rust SDK
 
-[English](./README.md) | [中文](./README.zh-CN.md)
+[English](https://github.com/yuqiang-yuan/ali-oss-rs) | [中文](https://github.com/yuqiang-yuan/ali-oss-rs/blob/dev/README.zh-CN.md)
 
 *本项目还在积极开发中*
 
