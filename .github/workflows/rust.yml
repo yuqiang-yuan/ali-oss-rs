@@ -1,0 +1,29 @@
+name: Check MSRV
+
+# 手动触发
+on:
+  workflow_dispatch:
+
+jobs:
+  find-msrv:
+    runs-on: ubuntu-latest
+    steps:
+      # 首先安装最新版本的 Rust
+      - name: Install latest Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+
+      # 安装 cargo-msrv
+      - name: Install cargo-msrv
+        run: cargo install cargo-msrv
+
+      # 检出代码
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # 运行 cargo msrv find
+      - name: Find MSRV
+        run: cargo msrv find
