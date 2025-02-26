@@ -7,6 +7,8 @@ pub mod multipart;
 pub mod multipart_common;
 pub mod object;
 pub mod object_common;
+pub mod object_ext;
+pub mod object_ext_common;
 pub mod presign;
 pub mod presign_common;
 pub mod request;
