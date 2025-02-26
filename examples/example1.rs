@@ -15,7 +15,10 @@ async fn main() -> Result<()> {
     list_buckets_result.buckets.iter().for_each(|b| println!("{}\t{}", b.name, b.storage_class));
 
     let objects = client
-        .list_objects("example-bucket", Some(ListObjectsOptionsBuilder::default().prefix("test").build()))
+        .list_objects(
+            "example-bucket",
+            Some(ListObjectsOptionsBuilder::default().prefix("test/").delimiter('/').build()),
+        )
         .await?;
     objects.contents.iter().for_each(|o| println!("{}\t{}", o.key, o.size));
 

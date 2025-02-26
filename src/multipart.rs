@@ -8,7 +8,11 @@ use base64::{prelude::BASE64_STANDARD, Engine};
 use crate::{
     error::Error,
     multipart_common::{
-        build_complete_multipart_uploads_request, build_initiate_multipart_uploads_request, build_list_multipart_uploads_request, build_list_parts_request, build_upload_part_copy_request, build_upload_part_request, CompleteMultipartUploadApiResponse, CompleteMultipartUploadOptions, CompleteMultipartUploadRequest, CompleteMultipartUploadResult, InitiateMultipartUploadOptions, InitiateMultipartUploadResult, ListMultipartUploadsOptions, ListMultipartUploadsResult, ListPartsOptions, ListPartsResult, UploadPartCopyOptions, UploadPartCopyRequest, UploadPartCopyResult, UploadPartRequest, UploadPartResult
+        build_complete_multipart_uploads_request, build_initiate_multipart_uploads_request, build_list_multipart_uploads_request, build_list_parts_request,
+        build_upload_part_copy_request, build_upload_part_request, CompleteMultipartUploadApiResponse, CompleteMultipartUploadOptions,
+        CompleteMultipartUploadRequest, CompleteMultipartUploadResult, InitiateMultipartUploadOptions, InitiateMultipartUploadResult,
+        ListMultipartUploadsOptions, ListMultipartUploadsResult, ListPartsOptions, ListPartsResult, UploadPartCopyOptions, UploadPartCopyRequest,
+        UploadPartCopyResult, UploadPartRequest, UploadPartResult,
     },
     request::{OssRequest, RequestMethod},
     util::{validate_bucket_name, validate_object_key},
@@ -110,7 +114,7 @@ pub trait MultipartUploadsOperations {
         bucket_name: S1,
         object_key: S2,
         data: CompleteMultipartUploadRequest,
-        options: Option<CompleteMultipartUploadOptions>
+        options: Option<CompleteMultipartUploadOptions>,
     ) -> Result<CompleteMultipartUploadResult>
     where
         S1: AsRef<str> + Send,
@@ -270,17 +274,13 @@ impl MultipartUploadsOperations for Client {
         bucket_name: S1,
         object_key: S2,
         data: CompleteMultipartUploadRequest,
-        options: Option<CompleteMultipartUploadOptions>
+        options: Option<CompleteMultipartUploadOptions>,
     ) -> Result<CompleteMultipartUploadResult>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send,
     {
-        let with_callback = if let Some(opt) = &options {
-            opt.callback.is_some()
-        } else {
-            false
-        };
+        let with_callback = if let Some(opt) = &options { opt.callback.is_some() } else { false };
 
         let request = build_complete_multipart_uploads_request(bucket_name.as_ref(), object_key.as_ref(), data, &options)?;
         let (_, content) = self.do_request::<String>(request).await?;
@@ -288,7 +288,9 @@ impl MultipartUploadsOperations for Client {
         if with_callback {
             Ok(CompleteMultipartUploadResult::CallbackResponse(content))
         } else {
-            Ok(CompleteMultipartUploadResult::ApiResponse(CompleteMultipartUploadApiResponse::from_xml(&content)?))
+            Ok(CompleteMultipartUploadResult::ApiResponse(CompleteMultipartUploadApiResponse::from_xml(
+                &content,
+            )?))
         }
     }
 
@@ -339,9 +341,14 @@ mod test_multipart_async {
     use uuid::Uuid;
 
     use crate::{
-        multipart::MultipartUploadsOperations, multipart_common::{
-            CompleteMultipartUploadOptions, CompleteMultipartUploadRequest, CompleteMultipartUploadResult, UploadPartCopyOptionsBuilder, UploadPartCopyRequest, UploadPartRequest
-        }, object::ObjectOperations, object_common::{CallbackBodyParameter, CallbackBuilder}, Client
+        multipart::MultipartUploadsOperations,
+        multipart_common::{
+            CompleteMultipartUploadOptions, CompleteMultipartUploadRequest, CompleteMultipartUploadResult, UploadPartCopyOptionsBuilder, UploadPartCopyRequest,
+            UploadPartRequest,
+        },
+        object::ObjectOperations,
+        object_common::{CallbackBodyParameter, CallbackBuilder},
+        Client,
     };
 
     static INIT: Once = Once::new();
@@ -565,7 +572,6 @@ mod test_multipart_async {
         let resp = client.exists(bucket, &object, None).await;
         assert!(resp.is_ok());
         assert!(!resp.unwrap());
-
     }
 
     #[tokio::test]
@@ -621,7 +627,6 @@ mod test_multipart_async {
 
         client.delete_object(bucket, &dest_object_key, None).await.unwrap();
     }
-
 
     #[tokio::test]
     async fn test_multipart_upload_with_callback() {
@@ -711,9 +716,7 @@ mod test_multipart_async {
             .custom_variable("v1", "this is value of v1")
             .build();
 
-        let options = CompleteMultipartUploadOptions {
-            callback: Some(cb)
-        };
+        let options = CompleteMultipartUploadOptions { callback: Some(cb) };
 
         let comp_response = client
             .complete_multipart_uploads(
@@ -742,7 +745,6 @@ mod test_multipart_async {
         client.delete_object(bucket, &object, None).await.unwrap();
     }
 }
-
 
 #[cfg(test)]
 mod test {

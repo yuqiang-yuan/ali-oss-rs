@@ -2,7 +2,7 @@
 
 [English](https://github.com/yuqiang-yuan/ali-oss-rs) | [中文](https://github.com/yuqiang-yuan/ali-oss-rs/blob/dev/README.zh-CN.md)
 
-*This project is under active development*
+*This project is under active development. Any feedback and contribution would be greatly appreciated.*
 
 Aliyun Object Storage Service (OSS) is a massive, secure, cost-effective, and highly reliable cloud storage service provided by Alibaba Cloud. Users can store and access any type of data at any time, from anywhere, using any internet device through simple REST interfaces. OSS provides SDKs in multiple programming languages to help developers quickly integrate with OSS services.
 
@@ -51,7 +51,7 @@ Aliyun Object Storage Service (OSS) is a massive, secure, cost-effective, and hi
 
 You need add `dotenvy` crate to your project.
 
-```
+```rust
     dotenvy::dotenv().unwrap();
 
     // `.env` file should contain the following keys
@@ -68,7 +68,12 @@ You need add `dotenvy` crate to your project.
     let objects = client
         .list_objects(
             "example-bucket",
-            Some(ListObjectsOptionsBuilder::default().prefix("test").build())
+            Some(
+                ListObjectsOptionsBuilder::default()
+                    .prefix("test/")
+                    .delimiter('/')
+                    .build()
+            )
         ).await?;
     objects.contents.iter().for_each(|o| println!("{}\t{}", o.key, o.size));
 

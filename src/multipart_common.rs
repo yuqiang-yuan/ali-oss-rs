@@ -294,7 +294,7 @@ impl CompleteMultipartUploadRequest {
 #[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct CompleteMultipartUploadOptions {
-    pub callback: Option<Callback>
+    pub callback: Option<Callback>,
 }
 
 /// Complete multipart upload result
@@ -768,7 +768,7 @@ pub(crate) fn build_complete_multipart_uploads_request(
     bucket_name: &str,
     object_key: &str,
     data: CompleteMultipartUploadRequest,
-    options: &Option<CompleteMultipartUploadOptions>
+    options: &Option<CompleteMultipartUploadOptions>,
 ) -> Result<OssRequest> {
     if !validate_bucket_name(bucket_name) {
         return Err(Error::Other(format!("invalid bucket name: {}", bucket_name)));

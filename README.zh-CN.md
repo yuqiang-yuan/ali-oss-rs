@@ -2,7 +2,7 @@
 
 [English](https://github.com/yuqiang-yuan/ali-oss-rs) | [中文](https://github.com/yuqiang-yuan/ali-oss-rs/blob/dev/README.zh-CN.md)
 
-*本项目还在积极开发中*
+*本项目还在积极开发中，欢迎试用以及提出 PR*
 
 阿里云对象存储 OSS（Object Storage Service）是阿里云提供的一种海量、安全、低成本、高可靠的云存储服务。
 用户可以通过简单的 REST 接口，在任何时间、任何地点，使用任何互联网设备存储和访问任意类型的数据。OSS 提供多种编程语言的 SDK，帮助开发者快速接入 OSS 服务。
@@ -53,7 +53,7 @@
 
 You need add `dotenvy` crate to your project.
 
-```
+```rust
     dotenvy::dotenv().unwrap();
 
     // `.env` file should contain the following keys
@@ -70,7 +70,12 @@ You need add `dotenvy` crate to your project.
     let objects = client
         .list_objects(
             "example-bucket",
-            Some(ListObjectsOptionsBuilder::default().prefix("test").build())
+            Some(
+                ListObjectsOptionsBuilder::default()
+                    .prefix("test/")
+                    .delimiter('/')
+                    .build()
+            )
         ).await?;
     objects.contents.iter().for_each(|o| println!("{}\t{}", o.key, o.size));
 

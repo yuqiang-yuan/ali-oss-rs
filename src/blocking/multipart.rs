@@ -326,10 +326,12 @@ mod test_multipart_blocking {
     use uuid::Uuid;
 
     use crate::{
-        blocking::{multipart::MultipartUploadsOperations, object::ObjectOperations, Client}, multipart_common::{
+        blocking::{multipart::MultipartUploadsOperations, object::ObjectOperations, Client},
+        multipart_common::{
             CompleteMultipartUploadOptions, CompleteMultipartUploadRequest, CompleteMultipartUploadResult, UploadPartCopyOptionsBuilder, UploadPartCopyRequest,
             UploadPartRequest,
-        }, object_common::{CallbackBodyParameter, CallbackBuilder}
+        },
+        object_common::{CallbackBodyParameter, CallbackBuilder},
     };
 
     static INIT: Once = Once::new();
