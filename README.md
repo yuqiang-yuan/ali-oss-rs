@@ -1,5 +1,11 @@
 # Aliyun OSS Rust SDK
 
+=======================
+[![Crates.io Version](https://img.shields.io/crates/v/ali-oss-rs)](https://crates.io/crates/ali-oss-rs)
+![Crates.io MSRV](https://img.shields.io/crates/msrv/ali-oss-rs)
+[![docs.rs](https://img.shields.io/docsrs/ali-oss-rs)](https://docs.rs/ali-oss-rs)
+[![Apache-2.0](https://img.shields.io/github/license/yuqiang-yuan/ali-oss-rs)](https://github.com/yuqiang-yuan/ali-oss-rs?tab=License-1-ov-file)
+
 [English](https://github.com/yuqiang-yuan/ali-oss-rs) | [中文](https://github.com/yuqiang-yuan/ali-oss-rs/blob/dev/README.zh-CN.md)
 
 *This project is under active development. Any feedback and contribution would be greatly appreciated.*
