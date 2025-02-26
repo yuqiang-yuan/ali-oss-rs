@@ -1,16 +1,90 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Display};
 
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 
 use crate::{
     common::{
-        self, AccessMonitor, BucketAcl, CrossRegionReplication, DataRedundancyType, ObjectType, Owner, ServerSideEncryptionAlgorithm, ServerSideEncryptionRule, StorageClass, TransferAcceleration, Versioning
+        self, AccessMonitor, CrossRegionReplication, DataRedundancyType, ObjectType, Owner, ServerSideEncryptionAlgorithm, ServerSideEncryptionRule, StorageClass, TransferAcceleration, Versioning
     },
     error::Error,
     request::{OssRequest, RequestMethod},
     util::{sanitize_etag, validate_bucket_name, validate_tag_key, validate_tag_value},
     Result,
 };
+
+
+///
+/// Represents the access control list (ACL) for an bucket in Aliyun OSS.
+///
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+pub enum BucketAcl {
+    #[cfg_attr(feature = "serde-support", serde(rename = "public-read-write"))]
+    PublicReadWrite,
+
+    #[cfg_attr(feature = "serde-support", serde(rename = "public-read"))]
+    PublicRead,
+
+    #[default]
+    #[cfg_attr(feature = "serde-support", serde(rename = "private"))]
+    Private,
+}
+
+impl BucketAcl {
+    pub fn as_str(&self) -> &str {
+        match self {
+            BucketAcl::PublicReadWrite => "public-read-write",
+            BucketAcl::PublicRead => "public-read",
+            BucketAcl::Private => "private",
+        }
+    }
+}
+
+impl Display for BucketAcl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BucketAcl::PublicReadWrite => write!(f, "public-read-write"),
+            BucketAcl::PublicRead => write!(f, "public-read"),
+            BucketAcl::Private => write!(f, "private"),
+        }
+    }
+}
+
+impl AsRef<str> for BucketAcl {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl TryFrom<&str> for BucketAcl {
+    type Error = crate::error::Error;
+
+    fn try_from(s: &str) -> std::result::Result<Self, Self::Error> {
+        match s {
+            "public-read-write" => Ok(BucketAcl::PublicReadWrite),
+            "public-read" => Ok(BucketAcl::PublicRead),
+            "private" => Ok(BucketAcl::Private),
+            _ => Err(Error::Other(format!("Invalid ACL value: {}", s))),
+        }
+    }
+}
+
+impl TryFrom<String> for BucketAcl {
+    type Error = crate::error::Error;
+
+    fn try_from(s: String) -> std::result::Result<Self, Self::Error> {
+        Self::try_from(s.as_str())
+    }
+}
+
+impl TryFrom<&String> for BucketAcl {
+    type Error = crate::error::Error;
+
+    fn try_from(s: &String) -> std::result::Result<Self, Self::Error> {
+        Self::try_from(s.as_str())
+    }
+}
+
 
 /// Summary information of a bucket.
 #[derive(Debug, Clone, Default)]

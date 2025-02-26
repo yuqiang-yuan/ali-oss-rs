@@ -186,7 +186,7 @@ pub mod test_bucket_async {
 
     use crate::{
         bucket::BucketOperations,
-        bucket_common::{ListBucketsOptions, ListObjectsOptionsBuilder}, common::BucketAcl,
+        bucket_common::{BucketAcl, ListBucketsOptions, ListObjectsOptionsBuilder},
     };
 
     static INIT: Once = Once::new();

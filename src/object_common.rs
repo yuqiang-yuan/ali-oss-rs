@@ -1,15 +1,93 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Display};
 
 use base64::prelude::{Engine, BASE64_STANDARD};
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 
 use crate::{
-    common::{self, build_tag_string, ObjectAcl, MetadataDirective, ObjectType, ServerSideEncryptionAlgorithm, StorageClass, TagDirective, MIME_TYPE_XML},
+    common::{self, build_tag_string, MetadataDirective, ObjectType, ServerSideEncryptionAlgorithm, StorageClass, TagDirective, MIME_TYPE_XML},
     error::Error,
     request::{OssRequest, RequestMethod},
     util::{sanitize_etag, validate_bucket_name, validate_meta_key, validate_object_key, validate_tag_key, validate_tag_value},
     RequestBody, Result,
 };
+
+///
+/// Represents the access control list (ACL) for an object in Aliyun OSS.
+///
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+pub enum ObjectAcl {
+    #[default]
+    Default,
+
+    #[cfg_attr(feature = "serde-support", serde(rename = "public-read-write"))]
+    PublicReadWrite,
+
+    #[cfg_attr(feature = "serde-support", serde(rename = "public-read"))]
+    PublicRead,
+
+    #[cfg_attr(feature = "serde-support", serde(rename = "private"))]
+    Private,
+}
+
+impl ObjectAcl {
+    pub fn as_str(&self) -> &str {
+        match self {
+            ObjectAcl::PublicReadWrite => "public-read-write",
+            ObjectAcl::PublicRead => "public-read",
+            ObjectAcl::Private => "private",
+            ObjectAcl::Default => "default",
+        }
+    }
+}
+
+impl Display for ObjectAcl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ObjectAcl::PublicReadWrite => write!(f, "public-read-write"),
+            ObjectAcl::PublicRead => write!(f, "public-read"),
+            ObjectAcl::Private => write!(f, "private"),
+            ObjectAcl::Default => write!(f, "default"),
+        }
+    }
+}
+
+impl AsRef<str> for ObjectAcl {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl TryFrom<&str> for ObjectAcl {
+    type Error = crate::error::Error;
+
+    fn try_from(s: &str) -> std::result::Result<Self, Self::Error> {
+        match s {
+            "public-read-write" => Ok(ObjectAcl::PublicReadWrite),
+            "public-read" => Ok(ObjectAcl::PublicRead),
+            "private" => Ok(ObjectAcl::Private),
+            "default" | "" => Ok(ObjectAcl::Default),
+            _ => Err(Error::Other(format!("Invalid ACL value: {}", s))),
+        }
+    }
+}
+
+impl TryFrom<String> for ObjectAcl {
+    type Error = crate::error::Error;
+
+    fn try_from(s: String) -> std::result::Result<Self, Self::Error> {
+        Self::try_from(s.as_str())
+    }
+}
+
+impl TryFrom<&String> for ObjectAcl {
+    type Error = crate::error::Error;
+
+    fn try_from(s: &String) -> std::result::Result<Self, Self::Error> {
+        Self::try_from(s.as_str())
+    }
+}
+
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
