@@ -1,7 +1,5 @@
 # Aliyun OSS Rust SDK
 
-==============
-
 [![Crates.io Version](https://img.shields.io/crates/v/ali-oss-rs)](https://crates.io/crates/ali-oss-rs)
 ![Crates.io MSRV](https://img.shields.io/crates/msrv/ali-oss-rs)
 [![docs.rs](https://img.shields.io/docsrs/ali-oss-rs)](https://docs.rs/ali-oss-rs)
