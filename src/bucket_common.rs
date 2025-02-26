@@ -4,8 +4,7 @@ use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 
 use crate::{
     common::{
-        self, AccessMonitor, Acl, CrossRegionReplication, DataRedundancyType, ObjectType, Owner, ServerSideEncryptionAlgorithm, ServerSideEncryptionRule,
-        StorageClass, TransferAcceleration, Versioning,
+        self, AccessMonitor, BucketAcl, CrossRegionReplication, DataRedundancyType, ObjectType, Owner, ServerSideEncryptionAlgorithm, ServerSideEncryptionRule, StorageClass, TransferAcceleration, Versioning
     },
     error::Error,
     request::{OssRequest, RequestMethod},
@@ -103,7 +102,7 @@ pub struct BucketDetail {
     pub resource_group_id: Option<String>,
     pub comment: Option<String>,
     pub versioning: Option<Versioning>,
-    pub access_control_list: Vec<Acl>,
+    pub access_control_list: Vec<BucketAcl>,
     pub bucket_policy: BucketPolicy,
     pub server_side_encryption_rule: Option<ServerSideEncryptionRule>,
 
@@ -173,7 +172,7 @@ impl BucketDetail {
                         "DataRedundancyType" => bucket.data_redundancy_type = DataRedundancyType::try_from(s)?,
                         "CrossRegionReplication" => bucket.cross_region_acceleration = CrossRegionReplication::try_from(s)?,
                         "TransferAcceleration" => bucket.transfer_acceleration = TransferAcceleration::try_from(s)?,
-                        "Grant" if tags.get(tags.len() - 2) == Some(&"AccessControlList".to_string()) => bucket.access_control_list.push(Acl::try_from(s)?),
+                        "Grant" if tags.get(tags.len() - 2) == Some(&"AccessControlList".to_string()) => bucket.access_control_list.push(BucketAcl::try_from(s)?),
                         "SSEAlgorithm" if tags.get(tags.len() - 2) == Some(&"ServerSideEncryptionRule".to_string()) => sse_algorithm = s,
                         "KMSMasterKeyID" if tags.get(tags.len() - 2) == Some(&"ServerSideEncryptionRule".to_string()) => kms_master_key_id = s,
                         "KMSDataEncryption" if tags.get(tags.len() - 2) == Some(&"ServerSideEncryptionRule".to_string()) => kms_data_encryption = s,
@@ -330,7 +329,7 @@ impl PutBucketConfiguration {
 #[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct PutBucketOptions {
-    pub acl: Option<Acl>,
+    pub acl: Option<BucketAcl>,
     pub resource_group_id: Option<String>,
     pub tags: HashMap<String, String>,
 }

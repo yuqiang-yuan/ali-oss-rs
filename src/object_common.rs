@@ -4,7 +4,7 @@ use base64::prelude::{Engine, BASE64_STANDARD};
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 
 use crate::{
-    common::{self, build_tag_string, Acl, MetadataDirective, ObjectType, ServerSideEncryptionAlgorithm, StorageClass, TagDirective, MIME_TYPE_XML},
+    common::{self, build_tag_string, ObjectAcl, MetadataDirective, ObjectType, ServerSideEncryptionAlgorithm, StorageClass, TagDirective, MIME_TYPE_XML},
     error::Error,
     request::{OssRequest, RequestMethod},
     util::{sanitize_etag, validate_bucket_name, validate_meta_key, validate_object_key, validate_tag_key, validate_tag_value},
@@ -145,7 +145,7 @@ pub struct PutObjectOptions {
     pub server_side_encryption_key_id: Option<String>,
 
     /// 如果不指定，则默认采用 Bucket 的 ACL。
-    pub object_acl: Option<Acl>,
+    pub object_acl: Option<ObjectAcl>,
 
     /// 如果不指定，则默认采用 Bucket 的存储类型。
     pub storage_class: Option<StorageClass>,
@@ -176,7 +176,7 @@ pub struct PutObjectOptionsBuilder {
     server_side_encryption: Option<ServerSideEncryptionAlgorithm>,
     server_side_data_encryption: Option<ServerSideEncryptionAlgorithm>,
     server_side_encryption_key_id: Option<String>,
-    object_acl: Option<Acl>,
+    object_acl: Option<ObjectAcl>,
     storage_class: Option<StorageClass>,
     metadata: HashMap<String, String>,
     tags: HashMap<String, String>,
@@ -254,7 +254,7 @@ impl PutObjectOptionsBuilder {
         self
     }
 
-    pub fn object_acl(mut self, acl: Acl) -> Self {
+    pub fn object_acl(mut self, acl: ObjectAcl) -> Self {
         self.object_acl = Some(acl);
         self
     }
@@ -919,7 +919,7 @@ pub struct CopyObjectOptions {
     pub server_side_encryption_key_id: Option<String>,
 
     /// 指定 OSS 创建目标 Object 时的访问权限。
-    pub object_acl: Option<Acl>,
+    pub object_acl: Option<ObjectAcl>,
 
     /// 指定 OSS 创建目标 Object 时的存储类型
     pub storage_class: Option<StorageClass>,
@@ -939,7 +939,7 @@ pub struct CopyObjectOptionsBuilder {
     metadata: HashMap<String, String>,
     server_side_encryption: Option<ServerSideEncryptionAlgorithm>,
     server_side_encryption_key_id: Option<String>,
-    object_acl: Option<Acl>,
+    object_acl: Option<ObjectAcl>,
     storage_class: Option<StorageClass>,
     tags: HashMap<String, String>,
     tag_directive: Option<TagDirective>,
@@ -1015,7 +1015,7 @@ impl CopyObjectOptionsBuilder {
         self
     }
 
-    pub fn object_acl(mut self, acl: Acl) -> Self {
+    pub fn object_acl(mut self, acl: ObjectAcl) -> Self {
         self.object_acl = Some(acl);
         self
     }

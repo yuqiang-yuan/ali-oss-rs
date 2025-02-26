@@ -186,7 +186,7 @@ pub mod test_bucket_async {
 
     use crate::{
         bucket::BucketOperations,
-        bucket_common::{ListBucketsOptions, ListObjectsOptionsBuilder},
+        bucket_common::{ListBucketsOptions, ListObjectsOptionsBuilder}, common::BucketAcl,
     };
 
     static INIT: Once = Once::new();
@@ -271,5 +271,23 @@ pub mod test_bucket_async {
         let result = response.unwrap();
         assert!(result.key_count > 0);
         assert_eq!(result.key_count, (result.common_prefixes.len() + result.contents.len()) as u64);
+    }
+
+    #[tokio::test]
+    async fn test_get_bucket_detail_async() {
+        setup_comp();
+        let client = crate::Client::from_env();
+
+        let response = client.get_bucket_info("mi-dev-public").await;
+        assert!(response.is_ok());
+
+        let ret = response.unwrap();
+        assert_eq!(BucketAcl::PublicRead, ret.access_control_list[0]);
+
+        let response = client.get_bucket_info("mi-dev-private").await;
+        assert!(response.is_ok());
+
+        let ret = response.unwrap();
+        assert_eq!(BucketAcl::Private, ret.access_control_list[0]);
     }
 }
