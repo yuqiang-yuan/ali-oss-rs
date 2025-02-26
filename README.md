@@ -1,25 +1,29 @@
 # Aliyun OSS Rust SDK
 
+[English](./README.md) | [中文](./README.zh-CN.md)
+
 *This project is under active development*
 
 Aliyun Object Storage Service (OSS) is a massive, secure, cost-effective, and highly reliable cloud storage service provided by Alibaba Cloud. Users can store and access any type of data at any time, from anywhere, using any internet device through simple REST interfaces. OSS provides SDKs in multiple programming languages to help developers quickly integrate with OSS services.
 
-## Features
+# Features
 
-- Uses asynchronous calls to Aliyun API by default
-- Supports blocking calls with `blocking` feature enabled
-- Supports serialization and deserialization of data with `serde` feature enabled
-- Supports field name "camelCase" while serializing/deserializing data with `serde_camelcase` feature enabled
-- Supports using rust tls with `rust-tls` feature enabled
+- Split operations to separated modules to reduce size of the final artifact.
+- Uses asynchronous calls to Aliyun API by default.
+- Supports blocking calls with `blocking` feature enabled.
+- Supports serialization and deserialization of data with `serde-support` feature enabled.
+- Supports field name "camelCase" while serializing/deserializing data with `serde-camelcase` feature enabled.
+- Supports using rust tls with `rust-tls` feature enabled.
+- Re-export `serde` and `serde_json` crate.
 
-## Implemented Operations
+# Implemented Operations
 
 - Bucket
   - Create bucket
   - List buckets
   - Delete bucket
   - Get bucket information
-  - Get bucket stat
+  - Get bucket statistics data
   - Get bucket location
   - List objects in bucket. (v2)
 - Objects
@@ -36,5 +40,37 @@ Aliyun Object Storage Service (OSS) is a massive, secure, cost-effective, and hi
   - Clean restored object
   - URL with signature for `GET` request
   - Multipart uploads: from file with range, buffer and base64 string.
-  - Multipart uplodds: list parts and abort multipart uploads
+  - Multipart uploads: list parts and abort multipart uploads
+  - Abort multipart uploads
   - Multipart uploads copy
+
+**Notice**: The `etag` in this library is sanitized by removing the leading and trailing double quotation marks (`"`). I don't understand why the ETag returned from the Aliyun API is wrapped in double quotation marks.
+
+
+# Examples
+
+You need add `dotenvy` crate to your project.
+
+```
+    dotenvy::dotenv().unwrap();
+
+    // `.env` file should contain the following keys
+    //
+    // ALI_ACCESS_KEY_ID=your_access_key_id
+    // ALI_ACCESS_KEY_SECRET=your_access_key_secret
+    // ALI_OSS_REGION=cn-beijing
+    // ALI_OSS_ENDPOINT=oss-cn-beijing.aliyuncs.com
+    let client = ali_oss_rs::Client::from_env();
+    let list_buckets_result = client.list_buckets(None).await?;
+
+    list_buckets_result.buckets.iter().for_each(|b| println!("{}\t{}", b.name, b.storage_class));
+
+    let objects = client
+        .list_objects(
+            "example-bucket",
+            Some(ListObjectsOptionsBuilder::default().prefix("test").build())
+        ).await?;
+    objects.contents.iter().for_each(|o| println!("{}\t{}", o.key, o.size));
+
+    Ok(())
+```

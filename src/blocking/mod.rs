@@ -225,6 +225,17 @@ impl Client {
     where
         T: FromResponse,
     {
+        // check if sign `host` header
+        if oss_request.additional_headers.contains("host") {
+            let host = if oss_request.bucket_name.is_empty() {
+                self.endpoint.clone()
+            } else {
+                format!("{}.{}", oss_request.bucket_name, self.endpoint)
+            };
+
+            oss_request.headers_mut().insert("host".to_string(), host);
+        }
+
         if let Some(s) = &self.sts_token {
             oss_request.headers_mut().insert("x-oss-security-token".to_string(), s.to_string());
         }

@@ -120,7 +120,7 @@ pub struct PutObjectOptions {
     /// 上传内容的 MD5 摘要算法结果的 base64 字符串。用于检查消息内容是否与发送时一致。Content-MD5 是由 MD5 算法生成的值。上传了 Content-MD5 请求头后，OSS 会计算消息体的 Content-MD5 并检查一致性。
     pub content_md5: Option<String>,
 
-    /// 过期事件。例如：`Wed, 08 Jul 2015 16:57:01 GMT`
+    /// 过期时间。例如：`Wed, 08 Jul 2015 16:57:01 GMT`
     pub expires: Option<String>,
 
     /// 指定 PutObject 操作时是否覆盖同名 Object。
@@ -1282,38 +1282,44 @@ pub(crate) fn build_head_object_request(bucket_name: &str, object_key: &str, opt
 }
 
 /// Put object result enumeration
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub enum PutObjectResult {
     /// This is response headers from aliyun oss api when you put object with no callback specified
-    #[cfg_attr(feature = "serde-camelcase", serde(rename = "apiResponseHeaders", rename_all = "camelCase"))]
-    ApiResponseHeaders {
-        request_id: String,
-
-        /// 已经移除了首尾双引号（`"`）之后的字符串
-        etag: String,
-
-        /// 文件 MD5 值，Base64 编码的字符串
-        content_md5: String,
-
-        /// 文件 CRC64 值
-        hash_crc64ecma: u64,
-
-        /// 表示文件的版本 ID。仅当您将文件上传至已开启版本控制状态的 Bucket 时，会返回该响应头。
-        version_id: Option<String>,
-    },
+    #[cfg_attr(feature = "serde-camelcase", serde(rename = "apiResponse", rename_all = "camelCase"))]
+    ApiResponse(PutObjectApiResponse),
 
     /// This is your callback response content string when you put object with callback specified.
     /// `.0` should be a valid JSON string.
-    #[cfg_attr(feature = "serde-camelcase", serde(rename = "callbackResponseContent"))]
-    CallbackResponseContent(String),
+    #[cfg_attr(feature = "serde-camelcase", serde(rename = "callbackResponse"))]
+    CallbackResponse(String),
+}
+
+/// The response headers from aliyun oss put object api
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
+pub struct PutObjectApiResponse {
+    pub request_id: String,
+
+    /// 已经移除了首尾双引号（`"`）之后的字符串
+    pub etag: String,
+
+    /// 文件 MD5 值，Base64 编码的字符串
+    pub content_md5: String,
+
+    /// 文件 CRC64 值
+    pub hash_crc64ecma: u64,
+
+    /// 表示文件的版本 ID。仅当您将文件上传至已开启版本控制状态的 Bucket 时，会返回该响应头。
+    pub version_id: Option<String>,
 }
 
 /// If you put object without callback, parse aliyun oss api headers into `PutObjectResult::WithoutCallback` enum variant
-impl From<HashMap<String, String>> for PutObjectResult {
+impl From<HashMap<String, String>> for PutObjectApiResponse {
     fn from(mut headers: HashMap<String, String>) -> Self {
-        Self::ApiResponseHeaders {
+        Self {
             request_id: headers.remove("x-oss-request-id").unwrap_or_default(),
             etag: sanitize_etag(headers.remove("etag").unwrap_or_default()),
             content_md5: headers.remove("content-md5").unwrap_or_default(),
@@ -1532,7 +1538,7 @@ where
 }
 
 /// 发起回调请求的 `Content-Type`
-#[derive(Debug, Copy, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Copy, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum CallbackBodyType {
     #[default]
     #[serde(rename = "application/x-www-form-urlencoded")]
@@ -1796,7 +1802,7 @@ impl<'a> CallbackBuilder<'a> {
 /// - 深度冷归档类型 Object
 ///   - 高优先级（Expedited）：表示 12 小时内完成解冻。
 ///   - 标准（Standard，默认值）：表示48小时内完成解冻。
-#[derive(Debug, Copy, Clone, Default)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
 pub enum RestoreJobTier {
     #[cfg_attr(feature = "serde-support", serde(rename = "Standard"))]
@@ -1950,6 +1956,7 @@ pub(crate) fn build_restore_object_request(bucket_name: &str, object_key: &str, 
 mod test_object_common {
     use crate::object_common::CallbackBodyParameter;
 
+    #[cfg(feature = "serde-support")]
     use super::PutObjectResult;
 
     #[test]
@@ -1970,13 +1977,15 @@ mod test_object_common {
     #[test]
     #[cfg(feature = "serde-support")]
     fn test_put_object_result_serde() {
-        let ret = PutObjectResult::ApiResponseHeaders {
+        use crate::object_common::PutObjectApiResponse;
+
+        let ret = PutObjectResult::ApiResponse(PutObjectApiResponse {
             request_id: "abc".to_string(),
             etag: "1232".to_string(),
             content_md5: "abcsdf".to_string(),
             hash_crc64ecma: 1232344,
             version_id: None,
-        };
+        });
 
         let s = serde_json::to_string(&ret).unwrap();
         println!("{}", s);

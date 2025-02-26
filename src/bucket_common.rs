@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 
 use crate::{
@@ -7,6 +9,7 @@ use crate::{
     },
     error::Error,
     request::{OssRequest, RequestMethod},
+    util::{sanitize_etag, validate_bucket_name, validate_tag_key, validate_tag_value},
     Result,
 };
 
@@ -222,7 +225,7 @@ impl BucketDetail {
 pub struct ListBucketsResult {
     pub prefix: Option<String>,
     pub marker: Option<String>,
-    pub max_keys: Option<String>,
+    pub max_keys: Option<u32>,
     pub is_truncated: bool,
     pub next_marker: Option<String>,
     pub owner: Owner,
@@ -261,7 +264,7 @@ impl ListBucketsResult {
                     match current_tag.as_str() {
                         "Prefix" => ret.prefix = if s.is_empty() { None } else { Some(s) },
                         "Marker" => ret.marker = if s.is_empty() { None } else { Some(s) },
-                        "MaxKeys" => ret.max_keys = if s.is_empty() { None } else { Some(s) },
+                        "MaxKeys" => ret.max_keys = if s.is_empty() { None } else { Some(s.parse().unwrap_or_default()) },
                         "IsTruncated" => ret.is_truncated = s == "true",
                         "NextMarker" => ret.next_marker = if s.is_empty() { None } else { Some(s) },
                         _ => {}
@@ -286,7 +289,7 @@ impl ListBucketsResult {
 pub struct ListBucketsOptions {
     pub prefix: Option<String>,
     pub marker: Option<String>,
-    pub max_keys: Option<String>,
+    pub max_keys: Option<u32>,
     pub resource_group_id: Option<String>,
 }
 
@@ -329,7 +332,7 @@ impl PutBucketConfiguration {
 pub struct PutBucketOptions {
     pub acl: Option<Acl>,
     pub resource_group_id: Option<String>,
-    pub tags: Option<Vec<(String, String)>>,
+    pub tags: HashMap<String, String>,
 }
 
 /// Extract bucket location from XML response.
@@ -437,19 +440,23 @@ impl BucketStat {
 pub struct ObjectSummary {
     pub key: String,
 
-    /// e.g. `2012-02-24T08:42:32.000Z`
+    /// 最后修改时间。 e.g. `2012-02-24T08:42:32.000Z`
     pub last_modified: String,
 
-    /// This etag is starts and ends with double quotation characters (`"`)
-    /// and maybe includes hyphen (`-`) if there are multiple files have the same hash value.
+    /// 清理了首尾的双引号之后的 ETag。
     pub etag: String,
+
     pub object_type: ObjectType,
+
+    /// 以字节为单位的文件大小
     pub size: u64,
+
     pub storage_class: StorageClass,
 
-    /// Only presents when query with `fetch_owner` is set to `true`
+    /// 仅当查询时携带了 `fetch_owner` 且为 `true` 时返回
     pub owner: Option<Owner>,
 
+    /// Object 的解冻状态. e.g. `ongoing-request="true"`
     pub restore_info: Option<String>,
 }
 
@@ -471,7 +478,7 @@ impl ObjectSummary {
                     match tag.as_str() {
                         "Key" => data.key = s,
                         "LastModified" => data.last_modified = s,
-                        "ETag" => data.etag = s,
+                        "ETag" => data.etag = sanitize_etag(s),
                         "Type" => data.object_type = ObjectType::try_from(s)?,
                         "Size" => data.size = s.parse()?,
                         "StorageClass" => data.storage_class = StorageClass::try_from(s)?,
@@ -497,16 +504,37 @@ impl ObjectSummary {
 #[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct ListObjectsResult {
+    /// The bucket name. e.g. `example-bucket`
     pub name: String,
+
+    /// 本次查询结果的前缀。e.g. `logs/`
     pub prefix: String,
+
+    /// 响应请求内返回结果的最大数目。
     pub max_keys: u32,
-    pub delimiter: String,
+
+    /// 对 Object 名字进行分组的字符。所有名字包含指定的前缀且第一次出现 Delimiter 字符之间的 Object 作为一组元素 CommonPrefixes。 e.g. `/`
+    pub delimiter: Option<char>,
+
+    /// 如果请求中指定了 StartAfter 参数，则会在返回的响应中包含 StartAfter 元素。
     pub start_after: Option<String>,
+
+    /// 请求中返回的结果是否被截断。
     pub is_truncated: bool,
+
+    /// 此次请求返回的 Key 的个数。如果指定了 Delimiter，则 KeyCount 为 Key 和 CommonPrefixes 的元素之和。
     pub key_count: u64,
+
+    /// 如果请求中指定了 ContinuationToken 参数，则会在返回的响应中包含 ContinuationToken 元素。
     pub continuation_token: Option<String>,
+
+    /// 表明此次 ListObjectsV2（GetBucketV2）请求包含后续结果，需要将 NextContinuationToken 指定为 ContinuationToken 继续获取结果。
     pub next_continuation_token: Option<String>,
+
+    /// 如果请求中指定了 Delimiter 参数，则会在返回的响应中包含 CommonPrefixes 元素。该元素表明以 Delimiter 结尾，并有共同前缀的 Object 名称的集合。
     pub common_prefixes: Vec<String>,
+
+    /// 返回的文件元信息。
     pub contents: Vec<ObjectSummary>,
 }
 
@@ -534,7 +562,7 @@ impl ListObjectsResult {
                         "Name" => data.name = s,
                         "StartAfter" => data.start_after = if s.is_empty() { None } else { Some(s) },
                         "MaxKeys" => data.max_keys = s.parse()?,
-                        "Delimiter" => data.delimiter = s,
+                        "Delimiter" => data.delimiter = if s.is_empty() { None } else { s.chars().next() },
                         "IsTruncated" => data.is_truncated = s == "true",
                         "KeyCount" => data.key_count = s.parse()?,
                         "ContinuationToken" => data.continuation_token = if s.is_empty() { None } else { Some(s) },
@@ -661,16 +689,19 @@ pub(crate) fn build_put_bucket_request(bucket_name: &str, config: &PutBucketConf
             request = request.add_header("x-oss-resource-group-id", resource_group_id);
         }
 
-        if let Some(tags) = &options.tags {
-            if !tags.is_empty() {
-                let tags_string = tags
-                    .iter()
-                    .map(|(k, v)| format!("{}={}", urlencoding::encode(k), urlencoding::encode(v)))
-                    .collect::<Vec<String>>()
-                    .join("&");
-
-                request = request.add_header("x-oss-bucket-tagging", &tags_string);
+        if !options.tags.is_empty() {
+            if !options.tags.iter().all(|(k, v)| validate_tag_key(k) && validate_tag_value(v)) {
+                return Err(Error::Other(format!("invalid tag name or tag key: {:#?}", options.tags)));
             }
+
+            let tags_string = options
+                .tags
+                .iter()
+                .map(|(k, v)| format!("{}={}", urlencoding::encode(k), urlencoding::encode(v)))
+                .collect::<Vec<String>>()
+                .join("&");
+
+            request = request.add_header("x-oss-bucket-tagging", &tags_string);
         }
     }
 
@@ -687,8 +718,8 @@ pub(crate) fn build_list_buckets_request(options: &Option<ListBucketsOptions>) -
         if let Some(marker) = &opt.marker {
             request = request.add_query("marker", marker);
         }
-        if let Some(max_keys) = &opt.max_keys {
-            request = request.add_query("max-keys", max_keys);
+        if let Some(max_keys) = opt.max_keys {
+            request = request.add_query("max-keys", max_keys.to_string());
         }
         if let Some(oss_resource_group_id) = &opt.resource_group_id {
             request = request.add_header("x-oss-resource-group-id", oss_resource_group_id)
@@ -699,6 +730,10 @@ pub(crate) fn build_list_buckets_request(options: &Option<ListBucketsOptions>) -
 }
 
 pub(crate) fn build_list_objects_request(bucket_name: &str, options: &Option<ListObjectsOptions>) -> Result<OssRequest> {
+    if !validate_bucket_name(bucket_name) {
+        return Err(Error::Other(format!("invalid bucket name: {}", bucket_name)));
+    }
+
     let mut request = OssRequest::new().method(RequestMethod::Get).bucket(bucket_name).add_query("list-type", "2");
 
     if let Some(options) = options {

@@ -124,7 +124,15 @@ pub trait ObjectOperations {
     /// Create a "folder"
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
-    async fn create_folder<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<PutObjectOptions>) -> Result<PutObjectResult>
+    async fn create_folder<S1, S2>(&self, bucket_name: S1, object_key: S2) -> Result<()>
+    where
+        S1: AsRef<str> + Send,
+        S2: AsRef<str> + Send;
+
+    /// Delete a "folder". if the folder contains any object, it will not be deleted
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/deleteobject>
+    async fn delete_folder<S1, S2>(&self, bucket_name: S1, object_key: S2) -> Result<()>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send;
@@ -235,9 +243,9 @@ impl ObjectOperations for Client {
         let (headers, content) = self.do_request::<String>(request).await?;
 
         if with_callback {
-            Ok(PutObjectResult::CallbackResponseContent(content))
+            Ok(PutObjectResult::CallbackResponse(content))
         } else {
-            Ok(headers.into())
+            Ok(PutObjectResult::ApiResponse(headers.into()))
         }
     }
 
@@ -264,9 +272,9 @@ impl ObjectOperations for Client {
         let (headers, content) = self.do_request::<String>(request).await?;
 
         if with_callback {
-            Ok(PutObjectResult::CallbackResponseContent(content))
+            Ok(PutObjectResult::CallbackResponse(content))
         } else {
-            Ok(headers.into())
+            Ok(PutObjectResult::ApiResponse(headers.into()))
         }
     }
 
@@ -445,7 +453,7 @@ impl ObjectOperations for Client {
     /// The `object_key` must ends with `/`
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
-    async fn create_folder<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<PutObjectOptions>) -> Result<PutObjectResult>
+    async fn create_folder<S1, S2>(&self, bucket_name: S1, object_key: S2) -> Result<()>
     where
         S1: AsRef<str> + Send,
         S2: AsRef<str> + Send,
@@ -463,15 +471,44 @@ impl ObjectOperations for Client {
             return Err(Error::Other(format!("invalid bucket name: {}", bucket_name)));
         }
 
-        if !validate_object_key(&object_key) {
-            return Err(Error::Other(format!("invalid object key: {}", object_key)));
+        let request = OssRequest::new()
+            .method(RequestMethod::Put)
+            .bucket(bucket_name)
+            .object(object_key)
+            .body(RequestBody::Empty)
+            .content_length(0);
+
+        let _ = self.do_request::<()>(request).await?;
+
+        Ok(())
+    }
+
+    /// Delete a "folder". if the folder contains any object, it will not be deleted
+    ///
+    /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/deleteobject>
+    async fn delete_folder<S1, S2>(&self, bucket_name: S1, object_key: S2) -> Result<()>
+    where
+        S1: AsRef<str> + Send,
+        S2: AsRef<str> + Send,
+    {
+        let bucket_name = bucket_name.as_ref();
+        let object_key = object_key.as_ref();
+        let object_key = object_key.strip_prefix("/").unwrap_or(object_key);
+        let object_key = if object_key.ends_with("/") {
+            object_key.to_string()
+        } else {
+            format!("{}/", object_key)
+        };
+
+        if !validate_bucket_name(bucket_name) {
+            return Err(Error::Other(format!("invalid bucket name: {}", bucket_name)));
         }
 
-        let request = build_put_object_request(bucket_name, &object_key, RequestBody::Empty, &options)?;
+        let request = OssRequest::new().method(RequestMethod::Delete).bucket(bucket_name).object(object_key);
 
-        let (headers, _) = self.do_request::<()>(request).await?;
+        let _ = self.do_request::<()>(request).await?;
 
-        Ok(headers.into())
+        Ok(())
     }
 
     /// Get object metadata.
@@ -671,15 +708,16 @@ mod test_object_async {
     use std::{collections::HashMap, sync::Once};
 
     use base64::{prelude::BASE64_STANDARD, Engine};
+    use uuid::Uuid;
 
     use crate::{
         common::{ObjectType, StorageClass},
         object::ObjectOperations,
         object_common::{
-            CallbackBodyParameter, CallbackBuilder, DeleteMultipleObjectsConfig, GetObjectOptionsBuilder, PutObjectOptions, PutObjectOptionsBuilder,
-            PutObjectResult, RestoreObjectRequest,
+            CallbackBodyParameter, CallbackBuilder, DeleteMultipleObjectsConfig, GetObjectOptionsBuilder, PutObjectApiResponse, PutObjectOptions,
+            PutObjectOptionsBuilder, PutObjectResult, RestoreObjectRequest,
         },
-        Client,
+        util, Client,
     };
 
     static INIT: Once = Once::new();
@@ -693,16 +731,15 @@ mod test_object_async {
 
     #[tokio::test]
     async fn test_upload_file_1_async() {
+        log::debug!("test upload file with no options");
         setup();
 
         let client = Client::from_env();
+
+        let object = format!("rust-sdk-test/{}.pdf", uuid::Uuid::new_v4());
+
         let result = client
-            .put_object_from_file(
-                "yuanyq",
-                "rust-sdk-test/test-pdf-output.pdf",
-                "/home/yuanyq/Downloads/test-pdf-output.pdf",
-                None,
-            )
+            .put_object_from_file("yuanyq", &object, "/home/yuanyq/Downloads/test-pdf-output.pdf", None)
             .await;
 
         log::debug!("{:?}", result);
@@ -710,20 +747,32 @@ mod test_object_async {
         assert!(result.is_ok());
 
         let ret = result.unwrap();
-        if let PutObjectResult::ApiResponseHeaders {
+        if let PutObjectResult::ApiResponse(PutObjectApiResponse {
             request_id: _,
             etag: _,
             content_md5,
             hash_crc64ecma: _,
             version_id: _,
-        } = ret
+        }) = ret
         {
             assert_eq!("u3j3ZJAf4d4uOHz4BNcXiw==", content_md5);
+        } else {
+            panic!("md5 match failed");
         }
+
+        assert!(client.exists("yuanyq", &object, None).await.unwrap());
+
+        let _ = client.delete_object("yuanyq", &object, None).await;
+
+        let response = client.exists("yuanyq", &object, None).await;
+        log::debug!("{:#?}", response);
+
+        assert!(!response.unwrap());
     }
 
     #[tokio::test]
     async fn test_upload_file_2_async() {
+        log::debug!("test upload file with meta data set");
         setup();
 
         let client = Client::from_env();
@@ -739,13 +788,10 @@ mod test_object_async {
             ..Default::default()
         };
 
+        let object = format!("rust-sdk-test/{}.pdf", uuid::Uuid::new_v4());
+
         let result = client
-            .put_object_from_file(
-                "yuanyq",
-                "rust-sdk-test/云教材发布与管理系统-用户手册.pdf",
-                "/home/yuanyq/Downloads/云教材发布与管理系统-用户手册.pdf",
-                Some(options),
-            )
+            .put_object_from_file("yuanyq", &object, "/home/yuanyq/Downloads/云教材发布与管理系统-用户手册.pdf", Some(options))
             .await;
 
         log::debug!("{:?}", result);
@@ -753,21 +799,29 @@ mod test_object_async {
         assert!(result.is_ok());
 
         let ret = result.unwrap();
-        if let PutObjectResult::ApiResponseHeaders {
+        if let PutObjectResult::ApiResponse(PutObjectApiResponse {
             request_id: _,
             etag: _,
             content_md5,
             hash_crc64ecma: _,
             version_id: _,
-        } = ret
+        }) = ret
         {
             assert_eq!("m6YFnp+xXeBIXkiWnqFi9w==", content_md5);
         }
+
+        let _ = client.delete_object("yuanyq", &object, None).await;
+
+        let response = client.exists("yuanyq", &object, None).await;
+        log::debug!("{:#?}", response);
+
+        assert!(!response.unwrap());
     }
 
     /// Test upload file with non-default storage class
     #[tokio::test]
     async fn test_upload_file_3_async() {
+        log::debug!("test upload file and set to Archive storage class");
         setup();
 
         let client = Client::from_env();
@@ -777,8 +831,10 @@ mod test_object_async {
             ..Default::default()
         };
 
+        let object = format!("rust-sdk-test/{}.mp4", uuid::Uuid::new_v4());
+
         let result = client
-            .put_object_from_file("yuanyq", "rust-sdk-test/archived/demo.mp4", "/home/yuanyq/Pictures/demo.mp4", Some(options))
+            .put_object_from_file("yuanyq", &object, "/home/yuanyq/Pictures/demo.mp4", Some(options))
             .await;
 
         log::debug!("{:?}", result);
@@ -786,62 +842,98 @@ mod test_object_async {
         assert!(result.is_ok());
 
         let ret = result.unwrap();
-        if let PutObjectResult::ApiResponseHeaders {
+        if let PutObjectResult::ApiResponse(PutObjectApiResponse {
             request_id: _,
             etag: _,
             content_md5,
             hash_crc64ecma: _,
             version_id: _,
-        } = ret
+        }) = ret
         {
             assert_eq!("8TAE7tQlHGArvhVzfooeyw==", content_md5);
         }
+
+        let _ = client.delete_object("yuanyq", &object, None).await;
+
+        let response = client.exists("yuanyq", &object, None).await;
+        log::debug!("{:#?}", response);
+
+        assert!(!response.unwrap());
     }
 
     #[tokio::test]
     async fn test_create_folder_1_async() {
+        log::debug!("test create folder");
         setup();
 
         let client = Client::from_env();
 
-        let result = client.create_folder("yuanyq", "rust-sdk-test/test-folder/", None).await;
+        let result = client.create_folder("yuanyq", "rust-sdk-test/test-folder/").await;
 
         log::debug!("{:?}", result);
 
         assert!(result.is_ok())
     }
 
+    #[tokio::test]
+    async fn test_delete_folder_async() {
+        log::debug!("test delete folder");
+        setup();
+
+        let client = Client::from_env();
+
+        let bucket = "yuanyq";
+        let object = format!("rust-sdk-test/{}/", Uuid::new_v4());
+
+        client.create_folder(bucket, &object).await.unwrap();
+
+        let response = client.delete_folder(bucket, &object).await;
+        assert!(response.is_ok());
+    }
+
     /// Download full file content to local file
     /// with no options
     #[tokio::test]
     async fn test_download_file_1_async() {
+        log::debug!("test download object to local file");
         setup();
         let client = Client::from_env();
 
-        let output_file = "/home/yuanyq/Downloads/ali-oss-rs-test/katex.zip";
+        let output_file = format!("/home/yuanyq/Downloads/ali-oss-rs-test/{}.zip", Uuid::new_v4());
 
-        let result = client.get_object_to_file("yuanyq", "rust-sdk-test/katex.zip", output_file, None).await;
+        let result = client.get_object_to_file("yuanyq", "rust-sdk-test/katex.zip", &output_file, None).await;
 
         assert!(result.is_ok());
+
+        let md5_hash = util::file_md5(&output_file);
+        assert_eq!("pIPky6/KtraaoNqF76ia8Q==", md5_hash);
+
+        std::fs::remove_file(&output_file).unwrap();
+        log::debug!("local file {} is deleted", output_file);
     }
 
     /// Download range of file
     #[tokio::test]
     async fn test_download_file_2_async() {
+        log::debug!("test download file with range header");
         setup();
         let client = Client::from_env();
 
-        let output_file = "/home/yuanyq/Downloads/ali-oss-rs-test/katex.zip.1";
+        let output_file = format!("/home/yuanyq/Downloads/ali-oss-rs-test/{}.zip.1", Uuid::new_v4());
 
         let options = GetObjectOptionsBuilder::new().range("bytes=0-499").build();
 
-        let result = client.get_object_to_file("yuanyq", "rust-sdk-test/katex.zip", output_file, Some(options)).await;
+        let result = client
+            .get_object_to_file("yuanyq", "rust-sdk-test/katex.zip", &output_file, Some(options))
+            .await;
 
         assert!(result.is_ok());
 
-        let file_meta = std::fs::metadata(output_file).unwrap();
+        let file_meta = std::fs::metadata(&output_file).unwrap();
 
         assert_eq!(500, file_meta.len());
+
+        std::fs::remove_file(&output_file).unwrap();
     }
 
     /// Test invalid output file name
@@ -910,54 +1002,62 @@ mod test_object_async {
     /// Copy object in same bucket
     #[tokio::test]
     async fn test_copy_object_1_async() {
+        log::debug!("test copy object within the same bucket");
         setup();
         let client = Client::from_env();
 
         let source_bucket = "yuanyq";
-        let source_object = "test.php";
+        let source_object = "rust-sdk-test/katex.zip";
 
         let dest_bucket = "yuanyq";
-        let dest_object = "test.php.bak";
+        let dest_object = format!("rust-sdk-test/katex-{}.zip", Uuid::new_v4());
 
-        let ret = client.copy_object(source_bucket, source_object, dest_bucket, dest_object, None).await;
+        let ret = client.copy_object(source_bucket, source_object, dest_bucket, &dest_object, None).await;
 
         assert!(ret.is_ok());
 
         let source_meta = client.get_object_metadata(source_bucket, source_object, None).await.unwrap();
-        let dest_meta = client.get_object_metadata(dest_bucket, dest_object, None).await.unwrap();
+        let dest_meta = client.get_object_metadata(dest_bucket, &dest_object, None).await.unwrap();
 
         assert_eq!(source_meta.etag, dest_meta.etag);
+
+        client.delete_object("yuanyq", &dest_object, None).await.unwrap();
     }
 
     /// Copy object across buckets
     #[tokio::test]
     async fn test_copy_object_2_async() {
+        log::debug!("test copy object accross buckets");
         setup();
         let client = Client::from_env();
 
         let source_bucket = "yuanyq";
-        let source_object = "test.php";
+        let source_object = "rust-sdk-test/katex.zip";
 
         let dest_bucket = "yuanyq-2";
-        let dest_object = "test.php";
+        let dest_object = format!("rust-sdk-test/katex-{}.zip", Uuid::new_v4());
 
-        let ret = client.copy_object(source_bucket, source_object, dest_bucket, dest_object, None).await;
+        let ret = client.copy_object(source_bucket, source_object, dest_bucket, &dest_object, None).await;
 
         assert!(ret.is_ok());
 
         let source_meta = client.get_object_metadata(source_bucket, source_object, None).await.unwrap();
-        let dest_meta = client.get_object_metadata(dest_bucket, dest_object, None).await.unwrap();
+        let dest_meta = client.get_object_metadata(dest_bucket, &dest_object, None).await.unwrap();
 
         assert_eq!(source_meta.etag, dest_meta.etag);
+
+        client.delete_object(dest_bucket, &dest_object, None).await.unwrap();
     }
 
     #[tokio::test]
     async fn test_create_object_from_buffer_async() {
+        log::debug!("test create object from buffer");
+
         setup();
         let client = Client::from_env();
 
         let bucket = "yuanyq";
-        let object = "rust-sdk-test/img-from-buffer.jpg";
+        let object = format!("rust-sdk-test/{}.jpg", Uuid::new_v4());
 
         let options = PutObjectOptionsBuilder::new().mime_type("image/jpeg").build();
 
@@ -965,23 +1065,26 @@ mod test_object_async {
 
         let md5 = "1ziAOyOVKo5/xAIvbUEQJA==";
 
-        let ret = client.put_object_from_buffer(bucket, object, buffer, Some(options)).await;
+        let ret = client.put_object_from_buffer(bucket, &object, buffer, Some(options)).await;
 
         log::debug!("{:?}", ret);
 
         assert!(ret.is_ok());
 
-        let meta = client.head_object(bucket, object, None).await.unwrap();
+        let meta = client.head_object(bucket, &object, None).await.unwrap();
         assert_eq!(Some(md5.to_string()), meta.content_md5);
+
+        client.delete_object(bucket, &object, None).await.unwrap();
     }
 
     #[tokio::test]
     async fn test_create_object_from_base64_async() {
+        log::debug!("test create object from base64 string");
         setup();
         let client = Client::from_env();
 
         let bucket = "yuanyq";
-        let object = "rust-sdk-test/img-from-base64.jpg";
+        let object = format!("rust-sdk-test/{}.jpg", Uuid::new_v4());
 
         let options = PutObjectOptionsBuilder::new().mime_type("image/jpeg").build();
 
@@ -989,83 +1092,60 @@ mod test_object_async {
         let base64 = BASE64_STANDARD.encode(&buffer);
         let md5 = "1ziAOyOVKo5/xAIvbUEQJA==";
 
-        let ret = client.put_object_from_base64(bucket, object, base64, Some(options)).await;
+        let ret = client.put_object_from_base64(bucket, &object, base64, Some(options)).await;
 
         assert!(ret.is_ok());
 
-        let meta = client.head_object(bucket, object, None).await.unwrap();
+        let meta = client.head_object(bucket, &object, None).await.unwrap();
         assert_eq!(Some(md5.to_string()), meta.content_md5);
-    }
 
-    #[tokio::test]
-    async fn test_delete_object_async() {
-        setup();
-        let client = Client::from_env();
-
-        let bucket = "yuanyq";
-        let object = "rust-sdk-test/img-from-base64.jpg";
-
-        let ret = client.delete_object(bucket, object, None).await;
-        assert!(ret.is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_exists_async() {
-        setup();
-        let client = Client::from_env();
-
-        let bucket = "yuanyq";
-        let object = "rust-sdk-test/img-from-base64.jpg";
-
-        let ret = client.exists(bucket, object, None).await;
-        assert!(ret.is_ok());
-        assert!(!ret.unwrap());
-
-        let object = "test.php";
-        let ret = client.exists(bucket, object, None).await;
-        assert!(ret.is_ok());
-        assert!(ret.unwrap());
+        client.delete_object(bucket, &object, None).await.unwrap();
     }
 
     #[tokio::test]
     async fn test_append_object_1_async() {
+        log::debug!("test append object from file");
         setup();
         let client = Client::from_env();
 
         let bucket = "yuanyq";
-        let object = "rust-sdk-test/img-appended-from-file.jpg";
+        let object = format!("rust-sdk-test/{}.jpg", Uuid::new_v4());
 
         let file1 = "/home/yuanyq/Pictures/test-image-part-1.data";
         let file2 = "/home/yuanyq/Pictures/test-image-part-2.data";
         let file3 = "/home/yuanyq/Pictures/test-image-part-3.data";
 
-        let ret1 = client.append_object_from_file(bucket, object, file1, 0, None).await;
+        let ret1 = client.append_object_from_file(bucket, &object, file1, 0, None).await;
 
         assert!(ret1.is_ok());
 
         let next_pos = ret1.unwrap().next_append_position;
         assert_eq!(61929, next_pos);
 
-        let ret2 = client.append_object_from_file(bucket, object, file2, next_pos, None).await;
+        let ret2 = client.append_object_from_file(bucket, &object, file2, next_pos, None).await;
         assert!(ret2.is_ok());
 
         let next_pos = ret2.unwrap().next_append_position;
         assert_eq!(61929 * 2, next_pos);
 
-        let ret3 = client.append_object_from_file(bucket, object, file3, next_pos, None).await;
+        let ret3 = client.append_object_from_file(bucket, &object, file3, next_pos, None).await;
         assert!(ret3.is_ok());
 
-        let meta = client.head_object(bucket, object, None).await;
-        log::debug!("{:#?}", meta.unwrap());
+        let meta = client.head_object(bucket, &object, None).await;
+
+        assert_eq!(185786, meta.unwrap().content_length);
+
+        client.delete_object(bucket, &object, None).await.unwrap();
     }
 
     #[tokio::test]
     async fn test_append_object_from_buffer_async() {
+        log::debug!("format append object from buffer");
         setup();
         let client = Client::from_env();
 
         let bucket = "yuanyq";
-        let object = "rust-sdk-test/img-appended-from-buffer.jpg";
+        let object = format!("rust-sdk-test/{}.jpg", Uuid::new_v4());
 
         let file1 = "/home/yuanyq/Pictures/test-image-part-1.data";
         let file2 = "/home/yuanyq/Pictures/test-image-part-2.data";
@@ -1075,32 +1155,35 @@ mod test_object_async {
         let buffer2 = std::fs::read(file2).unwrap();
         let buffer3 = std::fs::read(file3).unwrap();
 
-        let ret1 = client.append_object_from_buffer(bucket, object, buffer1, 0, None).await;
+        let ret1 = client.append_object_from_buffer(bucket, &object, buffer1, 0, None).await;
         assert!(ret1.is_ok());
 
         let next_pos = ret1.unwrap().next_append_position;
         assert_eq!(61929, next_pos);
 
-        let ret2 = client.append_object_from_buffer(bucket, object, buffer2, next_pos, None).await;
+        let ret2 = client.append_object_from_buffer(bucket, &object, buffer2, next_pos, None).await;
         assert!(ret2.is_ok());
 
         let next_pos = ret2.unwrap().next_append_position;
         assert_eq!(61929 * 2, next_pos);
 
-        let ret3 = client.append_object_from_buffer(bucket, object, buffer3, next_pos, None).await;
+        let ret3 = client.append_object_from_buffer(bucket, &object, buffer3, next_pos, None).await;
         assert!(ret3.is_ok());
 
-        let meta = client.head_object(bucket, object, None).await;
-        log::debug!("{:#?}", meta.unwrap());
+        let meta = client.head_object(bucket, &object, None).await;
+        assert_eq!(185786, meta.unwrap().content_length);
+
+        client.delete_object(bucket, &object, None).await.unwrap();
     }
 
     #[tokio::test]
     async fn test_append_object_from_base64_async() {
+        log::debug!("test append object from base64 string");
         setup();
         let client = Client::from_env();
 
         let bucket = "yuanyq";
-        let object = "rust-sdk-test/img-appended-from-base64.jpg";
+        let object = format!("rust-sdk-test/{}.jpg", Uuid::new_v4());
 
         let file1 = "/home/yuanyq/Pictures/test-image-part-1.data";
         let file2 = "/home/yuanyq/Pictures/test-image-part-2.data";
@@ -1114,23 +1197,25 @@ mod test_object_async {
         let s2 = BASE64_STANDARD.encode(buffer2);
         let s3 = BASE64_STANDARD.encode(buffer3);
 
-        let ret1 = client.append_object_from_base64(bucket, object, s1, 0, None).await;
+        let ret1 = client.append_object_from_base64(bucket, &object, s1, 0, None).await;
         assert!(ret1.is_ok());
 
         let next_pos = ret1.unwrap().next_append_position;
         assert_eq!(61929, next_pos);
 
-        let ret2 = client.append_object_from_base64(bucket, object, s2, next_pos, None).await;
+        let ret2 = client.append_object_from_base64(bucket, &object, s2, next_pos, None).await;
         assert!(ret2.is_ok());
 
         let next_pos = ret2.unwrap().next_append_position;
         assert_eq!(61929 * 2, next_pos);
 
-        let ret3 = client.append_object_from_base64(bucket, object, s3, next_pos, None).await;
+        let ret3 = client.append_object_from_base64(bucket, &object, s3, next_pos, None).await;
         assert!(ret3.is_ok());
 
-        let meta = client.head_object(bucket, object, None).await;
-        log::debug!("{:#?}", meta.unwrap());
+        let meta = client.head_object(bucket, &object, None).await;
+        assert_eq!(185786, meta.unwrap().content_length);
+
+        client.delete_object(bucket, &object, None).await.unwrap();
     }
 
     #[tokio::test]
@@ -1138,13 +1223,27 @@ mod test_object_async {
         setup();
         let client = Client::from_env();
 
-        let keys = [
-            "rust-sdk-test/01-01.jpg",
-            "rust-sdk-test/01-02.jpg",
-            "rust-sdk-test/01-03.png",
-            "rust-sdk-test/01-04.jpg",
-            "rust-sdk-test/01-05.png",
+        let local_files = [
+            "/home/yuanyq/Pictures/01-01.jpg",
+            "/home/yuanyq/Pictures/01-02.jpg",
+            "/home/yuanyq/Pictures/01-03.png",
+            "/home/yuanyq/Pictures/01-04.jpg",
+            "/home/yuanyq/Pictures/01-05.png",
         ];
+
+        let keys = [
+            format!("rust-sdk-test/{}.jpg", Uuid::new_v4()),
+            format!("rust-sdk-test/{}.jpg", Uuid::new_v4()),
+            format!("rust-sdk-test/{}.png", Uuid::new_v4()),
+            format!("rust-sdk-test/{}.jpg", Uuid::new_v4()),
+            format!("rust-sdk-test/{}.png", Uuid::new_v4()),
+        ];
+
+        for i in 0..5 {
+            let file = local_files[i];
+            let object = &keys[i];
+            client.put_object_from_file("yuanyq", object, file, None).await.unwrap();
+        }
 
         let response = client.delete_multiple_objects("yuanyq", DeleteMultipleObjectsConfig::FromKeys(&keys)).await;
 
@@ -1166,7 +1265,7 @@ mod test_object_async {
         let client = Client::from_env();
 
         let bucket = "yuanyq".to_string();
-        let object = "rust-sdk-test/test-1.webp";
+        let object = format!("rust-sdk-test/{}.webp", Uuid::new_v4());
         let file = "/home/yuanyq/Pictures/test-1.webp".to_string();
 
         let cb = CallbackBuilder::new("https://your-callback.domain.com/oss-callback-test.php")
@@ -1189,21 +1288,24 @@ mod test_object_async {
 
         let options = PutObjectOptionsBuilder::new().callback(cb).build();
 
-        let response = client.put_object_from_file(bucket, object, &file, Some(options)).await;
+        let response = client.put_object_from_file(bucket, &object, &file, Some(options)).await;
         assert!(response.is_ok());
 
         let ret = response.unwrap();
 
         log::debug!("{:#?}", ret);
+
+        client.delete_object("yuanyq", &object, None).await.unwrap();
     }
 
     #[tokio::test]
     async fn test_put_object_from_buffer_with_callback_async() {
+        log::debug!("test put object from buffer with callback");
         setup();
         let client = Client::from_env();
 
         let bucket = "yuanyq".to_string();
-        let object = "rust-sdk-test/test-1.webp";
+        let object = format!("rust-sdk-test/{}.webp", Uuid::new_v4());
         let file = "/home/yuanyq/Pictures/test-1.webp".to_string();
 
         let data = std::fs::read(&file).unwrap();
@@ -1228,30 +1330,28 @@ mod test_object_async {
 
         let options = PutObjectOptionsBuilder::new().callback(cb).build();
 
-        let response = client.put_object_from_buffer(bucket, object, data, Some(options)).await;
+        let response = client.put_object_from_buffer(bucket, &object, data, Some(options)).await;
         assert!(response.is_ok());
 
         let ret = response.unwrap();
 
         log::debug!("{:#?}", ret);
+
+        client.delete_object("yuanyq", &object, None).await.unwrap();
     }
 
     #[tokio::test]
     async fn test_restore_object_async() {
+        log::debug!("test restore archived object");
         setup();
         let client = Client::from_env();
 
         let bucket = "yuanyq".to_string();
-        let object = "rust-sdk-test/test-2.webp";
-        // let file = "/home/yuanyq/Pictures/test-2.webp".to_string();
+        let file = "/home/yuanyq/Pictures/test-1.webp";
+        let object = format!("rust-sdk-test/{}.webp", Uuid::new_v4());
 
-        // let options = PutObjectOptionsBuilder::new()
-        //     .storage_class(StorageClass::ColdArchive)
-        //     .build();
-
-        // let response = client.put_object_from_file(&bucket, object, file, Some(options)).await;
-
-        // assert!(response.is_ok());
+        let options = PutObjectOptionsBuilder::new().storage_class(StorageClass::Archive).build();
+        client.put_object_from_file(&bucket, &object, file, Some(options)).await.unwrap();
 
         let response = client
             .restore_object(&bucket, object, RestoreObjectRequest { days: 2, ..Default::default() })
@@ -1261,5 +1361,41 @@ mod test_object_async {
 
         let ret = response.unwrap();
         log::debug!("{:#?}", ret);
+    }
+
+    #[tokio::test]
+    async fn test_put_object_from_file_with_options_async() {
+        setup();
+        let client = Client::from_env();
+
+        let bucket = "yuanyq".to_string();
+        let object = format!("rust-sdk-test/{}.webp", Uuid::new_v4());
+        let file = "/home/yuanyq/Pictures/test-5.webp";
+
+        let options = PutObjectOptionsBuilder::new()
+            .metadata("x-oss-meta-who", "me")
+            .metadata("x-oss-meta-user-id", "123456")
+            .tag("source", "ubuntu")
+            .tag("purpose", "test rust sdk")
+            .build();
+
+        let response = client.put_object_from_file(&bucket, &object, file, Some(options)).await;
+        assert!(response.is_ok());
+
+        let result = response.unwrap();
+        if let PutObjectResult::ApiResponse(PutObjectApiResponse {
+            request_id: _,
+            etag: _,
+            content_md5,
+            hash_crc64ecma: _,
+            version_id: _,
+        }) = result
+        {
+            assert_eq!("gbqycESJX3i9b8aB/3Y7ZQ==", content_md5);
+        } else {
+            panic!("file md5 validation failed");
+        }
+
+        client.delete_object(&bucket, &object, None).await.unwrap();
     }
 }

@@ -122,7 +122,7 @@ mod test_bucket_blocking {
 
     use crate::{
         blocking::{bucket::BucketOperations, Client},
-        bucket_common::ListObjectsOptions,
+        bucket_common::{ListBucketsOptions, ListObjectsOptions, ListObjectsOptionsBuilder},
     };
 
     static INIT: Once = Once::new();
@@ -131,6 +131,13 @@ mod test_bucket_blocking {
         INIT.call_once(|| {
             simple_logger::init_with_level(log::Level::Debug).unwrap();
             dotenvy::dotenv().unwrap();
+        });
+    }
+
+    fn setup_comp() {
+        INIT.call_once(|| {
+            simple_logger::init_with_level(log::Level::Debug).unwrap();
+            dotenvy::from_filename(".env.comp").unwrap();
         });
     }
 
@@ -176,5 +183,55 @@ mod test_bucket_blocking {
 
         let result = response.unwrap();
         log::debug!("{:?}", result);
+    }
+
+    #[test]
+    fn test_list_buckets_with_options_blocking() {
+        setup_comp();
+        let client = crate::blocking::Client::from_env();
+
+        let options = ListBucketsOptions {
+            max_keys: Some(10),
+            ..Default::default()
+        };
+
+        let response = client.list_buckets(Some(options));
+        log::debug!("list buckets, page1: {:#?}", response);
+
+        assert!(response.is_ok());
+
+        let ret = response.unwrap();
+        assert_eq!(10, ret.buckets.len());
+
+        assert!(ret.next_marker.is_some());
+        assert!(ret.is_truncated);
+
+        let options = ListBucketsOptions {
+            max_keys: Some(10),
+            marker: ret.next_marker,
+            ..Default::default()
+        };
+
+        let response = client.list_buckets(Some(options));
+        log::debug!("list buckets, page2: {:#?}", response);
+        assert!(response.is_ok());
+
+        let ret = response.unwrap();
+        assert_eq!(9, ret.buckets.len());
+    }
+
+    #[test]
+    fn test_list_objects_blocking_1() {
+        setup_comp();
+        let client = crate::blocking::Client::from_env();
+
+        let options = ListObjectsOptionsBuilder::new().prefix("").delimiter('/').build();
+
+        let response = client.list_objects("mi-dev-public", Some(options));
+        assert!(response.is_ok());
+
+        let result = response.unwrap();
+        assert!(result.key_count > 0);
+        assert_eq!(result.key_count, (result.common_prefixes.len() + result.contents.len()) as u64);
     }
 }

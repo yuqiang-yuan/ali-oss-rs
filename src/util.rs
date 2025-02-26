@@ -4,6 +4,8 @@ use chrono::{DateTime, Utc};
 use hmac::{Hmac, Mac};
 use sha2::{Digest, Sha256};
 
+use crate::common;
+
 /// Get UTC date time string for aliyun oss API.
 /// e.g. 20231203T121212Z
 pub(crate) fn get_iso8601_date_time_string() -> String {
@@ -93,7 +95,7 @@ pub(crate) fn sanitize_etag(s: String) -> String {
 ///
 pub(crate) fn validate_bucket_name(name: &str) -> bool {
     // 检查长度
-    if name.len() < 3 || name.len() > 63 {
+    if name.len() < common::MIN_BUCKET_NAME_LENGTH || name.len() > common::MAX_BUCKET_NAME_LENGTH {
         return false;
     }
 
@@ -182,6 +184,18 @@ pub(crate) fn validate_path(p: impl AsRef<Path>) -> bool {
     } else {
         false
     }
+}
+
+/// Calculate file md5 and returns base64 string
+#[cfg(test)]
+pub(crate) fn file_md5(file: impl AsRef<Path>) -> String {
+    use base64::Engine;
+
+    let mut hasher = md5::Context::new();
+    let mut file = std::fs::File::open(file).unwrap();
+    std::io::copy(&mut file, &mut hasher).unwrap();
+    let data = hasher.compute();
+    base64::prelude::BASE64_STANDARD.encode(data.0)
 }
 
 #[cfg(test)]

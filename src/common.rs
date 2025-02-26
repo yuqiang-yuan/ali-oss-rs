@@ -10,6 +10,9 @@ pub const MIME_TYPE_XML: &str = "application/xml";
 pub const DELETE_MULTIPLE_OBJECTS_LIMIT: usize = 1000;
 pub const SIGNATURE_VERSION: &str = "OSS4-HMAC-SHA256";
 pub const UNSIGNED_PAYLOAD: &str = "UNSIGNED-PAYLOAD";
+pub const MIN_BUCKET_NAME_LENGTH: usize = 3;
+pub const MAX_BUCKET_NAME_LENGTH: usize = 63;
+pub const MAX_LIST_OBJECTS_LIMIT: u32 = 1000;
 
 #[derive(Debug, Clone, Default)]
 #[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
@@ -125,25 +128,28 @@ impl TryFrom<&String> for Acl {
     }
 }
 
-///
 /// Represents the storage class for an object in Aliyun OSS.
-///
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
 pub enum StorageClass {
+    /// 标准存储
     #[default]
     #[cfg_attr(feature = "serde-support", serde(rename = "Standard"))]
     Standard,
 
+    /// 低频访问
     #[cfg_attr(feature = "serde-support", serde(rename = "IA"))]
     IA,
 
+    /// 归档
     #[cfg_attr(feature = "serde-support", serde(rename = "Archive"))]
     Archive,
 
+    /// 冷归档
     #[cfg_attr(feature = "serde-support", serde(rename = "ColdArchive"))]
     ColdArchive,
 
+    /// 深度冷归档
     #[cfg_attr(feature = "serde-support", serde(rename = "DeepColdArchive"))]
     DeepColdArchive,
 }
@@ -487,22 +493,24 @@ pub struct ServerSideEncryptionRule {
     pub kms_data_encryption: Option<String>,
 }
 
-///
 /// Object type enumeration
-///
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
 #[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
 pub enum ObjectType {
+    /// 通过简单上传生成的 Object
     #[default]
     #[cfg_attr(feature = "serde-support", serde(rename = "Normal"))]
     Normal,
 
+    /// 通过分片上传生成的 Object
     #[cfg_attr(feature = "serde-support", serde(rename = "Multipart"))]
     Multipart,
 
+    /// 通过追加上传生成的 Object
     #[cfg_attr(feature = "serde-support", serde(rename = "Appendable"))]
     Appendable,
 
+    /// 符号链接
     #[cfg_attr(feature = "serde-support", serde(rename = "Symlink"))]
     Symlink,
 }
@@ -555,7 +563,7 @@ impl TryFrom<&String> for ObjectType {
 }
 
 /// How to apply metadata rule while coping object
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, Eq, PartialEq)]
 #[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
 pub enum MetadataDirective {
     /// 复制源 Object 的元数据到目标 Object。
@@ -623,7 +631,7 @@ impl TryFrom<&String> for MetadataDirective {
 }
 
 /// How to apply taggings rule while coping object
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 #[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
 pub enum TagDirective {
     /// 复制源 Object 的标签数据到目标 Object。

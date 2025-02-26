@@ -2,18 +2,20 @@
 
 use std::collections::HashMap;
 
+use base64::{prelude::BASE64_STANDARD, Engine};
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 
 use crate::{
     common,
     error::Error,
-    object_common::{build_put_object_request, PutObjectOptions},
+    object_common::{build_put_object_request, Callback, PutObjectOptions, PutObjectOptionsBuilder},
     request::{OssRequest, RequestMethod},
     util::{sanitize_etag, validate_bucket_name, validate_object_key},
     RequestBody, Result,
 };
 
 pub type InitiateMultipartUploadOptions = PutObjectOptions;
+pub type InitiateMultipartUploadOptionsBuilder = PutObjectOptionsBuilder;
 
 /// Initiate mutlipart upload result
 #[derive(Debug, Clone, Default)]
@@ -287,17 +289,39 @@ impl CompleteMultipartUploadRequest {
     }
 }
 
+/// Options for complete multipart uploads
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
+pub struct CompleteMultipartUploadOptions {
+    pub callback: Option<Callback>
+}
+
+/// Complete multipart upload result
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+pub enum CompleteMultipartUploadResult {
+    /// This is response headers from aliyun oss api when you put object with no callback specified
+    #[cfg_attr(feature = "serde-camelcase", serde(rename = "apiResponse", rename_all = "camelCase"))]
+    ApiResponse(CompleteMultipartUploadApiResponse),
+
+    /// This is your callback response content string when you put object with callback specified.
+    /// `.0` should be a valid JSON string.
+    #[cfg_attr(feature = "serde-camelcase", serde(rename = "callbackResponse"))]
+    CallbackResponse(String),
+}
+
 /// Request data for complete multipart upload
 #[derive(Debug, Clone, Default)]
 #[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
-pub struct CompleteMultipartUploadResult {
+pub struct CompleteMultipartUploadApiResponse {
     pub bucket: String,
     pub key: String,
     pub etag: String,
 }
 
-impl CompleteMultipartUploadResult {
+impl CompleteMultipartUploadApiResponse {
     pub(crate) fn from_xml(xml: &str) -> Result<Self> {
         let mut reader = quick_xml::Reader::from_str(xml);
         let mut tag = String::new();
@@ -740,7 +764,12 @@ pub(crate) fn build_upload_part_copy_request(
     Ok(request)
 }
 
-pub(crate) fn build_complete_multipart_uploads_request(bucket_name: &str, object_key: &str, data: CompleteMultipartUploadRequest) -> Result<OssRequest> {
+pub(crate) fn build_complete_multipart_uploads_request(
+    bucket_name: &str,
+    object_key: &str,
+    data: CompleteMultipartUploadRequest,
+    options: &Option<CompleteMultipartUploadOptions>
+) -> Result<OssRequest> {
     if !validate_bucket_name(bucket_name) {
         return Err(Error::Other(format!("invalid bucket name: {}", bucket_name)));
     }
@@ -761,13 +790,28 @@ pub(crate) fn build_complete_multipart_uploads_request(bucket_name: &str, object
 
     let xml = data.into_xml()?;
 
-    let request = OssRequest::new()
+    let mut request = OssRequest::new()
         .method(RequestMethod::Post)
         .bucket(bucket_name)
         .object(object_key)
         .add_query("uploadId", &upload_id)
         .content_type(common::MIME_TYPE_XML)
         .text_body(xml);
+
+    if let Some(options) = options {
+        if let Some(cb) = &options.callback {
+            // custom variable values are not serialized
+            let callback_json = serde_json::to_string(cb)?;
+            let callback_base64 = BASE64_STANDARD.encode(&callback_json);
+            request = request.add_header("x-oss-callback", callback_base64);
+
+            if !cb.custom_variables.is_empty() {
+                let callback_vars_json = serde_json::to_string(&cb.custom_variables)?;
+                let callback_vars_base64 = BASE64_STANDARD.encode(&callback_vars_json);
+                request = request.add_header("x-oss-callback-var", callback_vars_base64);
+            }
+        }
+    }
 
     Ok(request)
 }

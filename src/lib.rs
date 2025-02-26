@@ -28,10 +28,10 @@ use reqwest::{
     Body,
 };
 
+pub use reqwest;
 pub use serde;
 pub use serde_json;
 pub use tokio;
-pub use reqwest;
 
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio_util::codec::{BytesCodec, FramedRead};
@@ -56,6 +56,16 @@ impl ClientBuilder {
     /// `endpoint` could be: `oss-cn-hangzhou.aliyuncs.com` without scheme part.
     /// or you can include scheme part in the `endpoint`: `https://oss-cn-hangzhou.aliyuncs.com`.
     /// if no scheme specified, use `https` by default.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let client = ali_oss_rs::ClientBuilder::new(
+    ///     "your access key id",
+    ///     "your acess key secret",
+    ///     "oss-cn-hangzhou.aliyuncs.com"
+    /// ).build();
+    /// ```
     pub fn new<S1, S2, S3>(access_key_id: S1, access_key_secret: S2, endpoint: S3) -> Self
     where
         S1: AsRef<str>,
@@ -99,7 +109,7 @@ impl ClientBuilder {
 
     /// Build the client.
     ///
-    /// ## Error:
+    /// # Errors
     ///
     /// If `region` is not set and can not guessed from `endpoint`, returns error.
     pub fn build(self) -> std::result::Result<crate::Client, String> {
@@ -246,12 +256,23 @@ impl Client {
 
     /// Some of the strings are used multiple times,
     /// So I put them in this method to prevent re-generating
-    /// and better debuging output.
+    /// and better debugging output.
     /// And add some default headers to the request builder.
     async fn do_request<T>(&self, mut oss_request: crate::request::OssRequest) -> Result<(HashMap<String, String>, T)>
     where
         T: FromResponse,
     {
+        // check if sign `host` header
+        if oss_request.additional_headers.contains("host") {
+            let host = if oss_request.bucket_name.is_empty() {
+                self.endpoint.clone()
+            } else {
+                format!("{}.{}", oss_request.bucket_name, self.endpoint)
+            };
+
+            oss_request.headers_mut().insert("host".to_string(), host);
+        }
+
         if let Some(s) = &self.sts_token {
             oss_request.headers_mut().insert("x-oss-security-token".to_string(), s.to_string());
         }
