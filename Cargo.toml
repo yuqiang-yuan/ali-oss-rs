@@ -2,7 +2,7 @@
 name = "ali-oss-rs"
 version = "0.1.1"
 edition = "2021"
-license = "MIT License"
+license = "MIT"
 rust-version = "1.80.1"
 description = "Aliyun OSS SDK for Rust。阿里云对象存储 Rust SDK"
 authors = ["Yuan YQ <yuqiang.yuan@163.com>"]
