@@ -4,11 +4,11 @@ version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
 rust-version = "1.80.1"
-description = "Aliyun OSS SDK for Rust"
+description = "Aliyun OSS SDK for Rust。阿里云对象存储 Rust SDK"
 authors = ["Yuan YQ <yuqiang.yuan@163.com>"]
 repository = "https://github.com/yourusername/ali-oss-rs"
 documentation = "https://docs.rs/ali-oss-rs"
-keywords = ["aliyun", "oss", "阿里云", "阿里", "对象存储"]
+keywords = ["aliyun", "oss", "ali"]
 categories = ["api-bindings", "web-programming"]
 
 [dependencies]
