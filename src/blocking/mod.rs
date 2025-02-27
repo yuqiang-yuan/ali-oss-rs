@@ -18,6 +18,7 @@ pub mod bucket;
 pub mod multipart;
 pub mod object;
 pub mod presign;
+pub mod object_ext;
 
 /// Builder for `Client`.
 #[derive(Debug, Default)]

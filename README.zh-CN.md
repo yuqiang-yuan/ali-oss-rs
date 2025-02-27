@@ -50,13 +50,18 @@
   - 分片上传：列出一个 bucket 中的未完成/未取消的碎片
   - 取消分片上传
   - 分片复制 object。如果要复制大于 1GB 的 object，需要使用分片复制
+- Object 的更多操作
+  - 权限控制
+    - 读取 object acl
+    - 设置 object acl
+
 
 **注意**: 本项目中，`etag` 标签的首尾双引号（`"`）都被清理了（实在搞不懂未和在 ETag 前后都带有双引号）。从 API 返回的 ETag 清理之后再提取；需要提交 ETag 的调用，也会自动补充首尾双引号。对使用者而言，不用关心 ETag 上双引号的问题。
 
 
 # Examples
 
-You need add `dotenvy` crate to your project.
+运行下面的示例代码，你需要在项目中引入 `dotenvy` crate。
 
 ```rust
     dotenvy::dotenv().unwrap();

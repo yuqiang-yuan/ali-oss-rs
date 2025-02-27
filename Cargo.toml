@@ -11,6 +11,10 @@ documentation = "https://docs.rs/ali-oss-rs"
 keywords = ["aliyun", "oss", "ali"]
 categories = ["api-bindings", "web-programming"]
 
+[package.metadata.docs.rs]
+# Enable all features during documentation build
+all-features = true
+
 [dependencies]
 async-trait = "0.1.86"
 base64 = "0.22.1"

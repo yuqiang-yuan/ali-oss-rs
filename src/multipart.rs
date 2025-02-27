@@ -633,6 +633,8 @@ mod test_multipart_async {
         log::debug!("test multipart upload with callback while completing");
         setup();
 
+        let callback_url = std::env::var("CALLBACK_TEST_URL").unwrap();
+
         let client = Client::from_env();
 
         let bucket = "yuanyq";
@@ -698,7 +700,7 @@ mod test_multipart_async {
 
         log::debug!("going to complete multipart upload for upload id: {}", upload_id);
 
-        let cb = CallbackBuilder::new("https://dev.mbook.cc/oss-callback-test.php")
+        let cb = CallbackBuilder::new(&callback_url)
             .body_parameter(CallbackBodyParameter::OssBucket("the_bucket"))
             .body_parameter(CallbackBodyParameter::OssObject("the_object_key"))
             .body_parameter(CallbackBodyParameter::OssETag("the_etag"))
