@@ -52,6 +52,13 @@ Aliyun Object Storage Service (OSS) is a massive, secure, cost-effective, and hi
   - Permissions control
     - Get object acl
     - Put object acl
+  - Symlink
+    - Put symlink
+    - Get symlink
+  - Tagging
+    - Get tagging
+    - Put tagging
+    - Delete tagging
 
 
 **Notice**: The `etag` in this library is sanitized by removing the leading and trailing double quotation marks (`"`). I don't understand why the ETag returned from the Aliyun API is wrapped in double quotation marks.

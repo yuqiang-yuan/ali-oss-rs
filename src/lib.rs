@@ -1,4 +1,6 @@
 #![doc = include_str!("../README.md")]
+pub mod acl;
+pub mod acl_common;
 pub mod bucket;
 pub mod bucket_common;
 pub mod common;
@@ -7,11 +9,13 @@ pub mod multipart;
 pub mod multipart_common;
 pub mod object;
 pub mod object_common;
-pub mod object_ext;
-pub mod object_ext_common;
 pub mod presign;
 pub mod presign_common;
 pub mod request;
+pub mod symlink;
+pub mod symlink_common;
+pub mod tagging;
+pub mod tagging_common;
 
 #[cfg(feature = "blocking")]
 pub mod blocking;

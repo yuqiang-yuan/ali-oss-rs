@@ -6,6 +6,8 @@ use quick_xml::events::Event;
 use crate::error::Error;
 use crate::Result;
 
+pub const VERSION: &str = "0.1.3";
+
 pub const MIME_TYPE_XML: &str = "application/xml";
 pub const DELETE_MULTIPLE_OBJECTS_LIMIT: usize = 1000;
 pub const SIGNATURE_VERSION: &str = "OSS4-HMAC-SHA256";
@@ -622,6 +624,13 @@ impl TryFrom<&String> for TagDirective {
     fn try_from(value: &String) -> std::result::Result<Self, Self::Error> {
         Self::try_from(value.as_str())
     }
+}
+
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
+pub struct VersionIdOnlyOptions {
+    pub version_id: Option<String>,
 }
 
 /// Build tags string

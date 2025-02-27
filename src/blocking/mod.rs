@@ -14,11 +14,13 @@ use crate::{
     get_region_from_endpoint, hmac_sha256, util, RequestBody, Result,
 };
 
+pub mod acl;
 pub mod bucket;
 pub mod multipart;
 pub mod object;
-pub mod object_ext;
 pub mod presign;
+pub mod symlink;
+pub mod tagging;
 
 /// Builder for `Client`.
 #[derive(Debug, Default)]

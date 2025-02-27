@@ -1,9 +1,19 @@
-use crate::object_common::ObjectAcl;
-use crate::object_ext_common::{build_get_object_acl_request, build_put_object_acl_request, parse_objcect_acl_from_xml, GetObjectAclOptions};
-use crate::Result;
+//! Object acl module
 
-pub trait ObjectExtOperations {
-    /// Get and object's acl.
+use crate::{
+    acl_common::{build_get_object_acl_request, build_put_object_acl_request, parse_object_acl_from_xml},
+    common::VersionIdOnlyOptions,
+    object_common::ObjectAcl,
+    Result,
+};
+
+use super::Client;
+
+pub type PutObjectAclOptions = VersionIdOnlyOptions;
+pub type GetObjectAclOptions = VersionIdOnlyOptions;
+
+pub trait ObjectAclOperations {
+    /// Get an object's acl.
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getobjectacl>
     fn get_object_acl<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<GetObjectAclOptions>) -> Result<ObjectAcl>
@@ -11,7 +21,7 @@ pub trait ObjectExtOperations {
         S1: AsRef<str>,
         S2: AsRef<str>;
 
-    /// Put and object's acl. If you want to restore the object's acl to follow bucket acl settings, pass acl as `ObjectAcl::Default`
+    /// Put an object's acl. If you want to restore the object's acl to follow bucket acl settings, pass acl as `ObjectAcl::Default`
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobjectacl>
     fn put_object_acl<S1, S2>(&self, bucket_name: S1, object_key: S2, acl: ObjectAcl, options: Option<GetObjectAclOptions>) -> Result<()>
@@ -20,8 +30,8 @@ pub trait ObjectExtOperations {
         S2: AsRef<str>;
 }
 
-impl ObjectExtOperations for crate::blocking::Client {
-    /// Get and object's acl.
+impl ObjectAclOperations for Client {
+    /// Get an object's acl.
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/getobjectacl>
     fn get_object_acl<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<GetObjectAclOptions>) -> Result<ObjectAcl>
@@ -31,10 +41,10 @@ impl ObjectExtOperations for crate::blocking::Client {
     {
         let request = build_get_object_acl_request(bucket_name.as_ref(), object_key.as_ref(), &options)?;
         let (_, content) = self.do_request::<String>(request)?;
-        parse_objcect_acl_from_xml(&content)
+        parse_object_acl_from_xml(&content)
     }
 
-    /// Put and object's acl. If you want to restore the object's acl to follow bucket acl settings, pass acl as `ObjectAcl::Default`
+    /// Put an object's acl. If you want to restore the object's acl to follow bucket acl settings, pass acl as `ObjectAcl::Default`
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobjectacl>
     fn put_object_acl<S1, S2>(&self, bucket_name: S1, object_key: S2, acl: ObjectAcl, options: Option<GetObjectAclOptions>) -> Result<()>
@@ -49,14 +59,15 @@ impl ObjectExtOperations for crate::blocking::Client {
 }
 
 #[cfg(all(test, feature = "blocking"))]
-mod test_object_ext_operations_blocking {
+mod test_object_acl_blocking {
     use std::sync::Once;
 
     use reqwest::StatusCode;
     use uuid::Uuid;
 
+    use super::Client;
     use crate::{
-        blocking::{object::ObjectOperations, object_ext::ObjectExtOperations, Client},
+        blocking::{acl::ObjectAclOperations, object::ObjectOperations},
         object_common::ObjectAcl,
     };
 
@@ -70,7 +81,7 @@ mod test_object_ext_operations_blocking {
     }
 
     #[test]
-    fn test_object_acl_blocking_1() {
+    fn test_object_acl_blocking() {
         log::debug!("test a private object update to public");
         setup();
 

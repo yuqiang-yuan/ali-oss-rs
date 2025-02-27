@@ -171,7 +171,7 @@ pub struct PutObjectOptions {
     /// 如果是直接从字节数组创建 Object 的，则不会猜测这个值，建议显式指定
     pub mime_type: Option<String>,
 
-    /// 指定该Object被下载时网页的缓存行为。取值如下：
+    /// 指定该 Object 被下载时网页的缓存行为。取值如下：
     ///
     /// - `no-cache`：不可直接使用缓存，而是先到服务端验证 Object 是否已更新。如果 Object 已更新，表明缓存已过期，需从服务端重新下载 Object；如果 Object 未更新，表明缓存未过期，此时将使用本地缓存。
     /// - `no-store`：所有内容都不会被缓存。

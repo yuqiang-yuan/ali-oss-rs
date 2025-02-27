@@ -5,7 +5,7 @@ use std::{
     path::PathBuf,
 };
 
-use crate::util;
+use crate::{common, util};
 
 // 首先定义 RequestBody 枚举
 #[derive(Debug, Default)]
@@ -73,7 +73,7 @@ impl OssRequest {
             object_key: "".to_string(),
             method: RequestMethod::Get,
             headers: HashMap::from([
-                ("x-sdk-client".to_string(), "ali-oss-rs/0.1.0".to_string()),
+                ("x-sdk-client".to_string(), format!("ali-oss-rs/{}", common::VERSION)),
                 ("x-oss-content-sha256".to_string(), "UNSIGNED-PAYLOAD".to_string()),
                 ("x-oss-date".to_string(), date_time_string),
             ]),
