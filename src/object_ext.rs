@@ -2,7 +2,11 @@
 
 use async_trait::async_trait;
 
-use crate::{object_common::ObjectAcl, object_ext_common::{build_get_object_acl_request, build_put_object_acl_request, parse_objcect_acl_from_xml, GetObjectAclOptions}, Result};
+use crate::{
+    object_common::ObjectAcl,
+    object_ext_common::{build_get_object_acl_request, build_put_object_acl_request, parse_objcect_acl_from_xml, GetObjectAclOptions},
+    Result,
+};
 
 #[async_trait]
 pub trait ObjectExtOperations {
@@ -31,7 +35,7 @@ impl ObjectExtOperations for crate::Client {
     async fn get_object_acl<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<GetObjectAclOptions>) -> Result<ObjectAcl>
     where
         S1: AsRef<str> + Send,
-        S2: AsRef<str> + Send
+        S2: AsRef<str> + Send,
     {
         let request = build_get_object_acl_request(bucket_name.as_ref(), object_key.as_ref(), &options)?;
         let (_, content) = self.do_request::<String>(request).await?;
@@ -44,14 +48,13 @@ impl ObjectExtOperations for crate::Client {
     async fn put_object_acl<S1, S2>(&self, bucket_name: S1, object_key: S2, acl: ObjectAcl, options: Option<GetObjectAclOptions>) -> Result<()>
     where
         S1: AsRef<str> + Send,
-        S2: AsRef<str> + Send
+        S2: AsRef<str> + Send,
     {
         let request = build_put_object_acl_request(bucket_name.as_ref(), object_key.as_ref(), acl, &options)?;
         let _ = self.do_request::<()>(request).await?;
         Ok(())
     }
 }
-
 
 #[cfg(test)]
 mod test_object_ext_operations_async {

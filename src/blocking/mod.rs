@@ -17,8 +17,8 @@ use crate::{
 pub mod bucket;
 pub mod multipart;
 pub mod object;
-pub mod presign;
 pub mod object_ext;
+pub mod presign;
 
 /// Builder for `Client`.
 #[derive(Debug, Default)]

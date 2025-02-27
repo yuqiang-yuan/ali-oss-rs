@@ -4,14 +4,14 @@ use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 
 use crate::{
     common::{
-        self, AccessMonitor, CrossRegionReplication, DataRedundancyType, ObjectType, Owner, ServerSideEncryptionAlgorithm, ServerSideEncryptionRule, StorageClass, TransferAcceleration, Versioning
+        self, AccessMonitor, CrossRegionReplication, DataRedundancyType, ObjectType, Owner, ServerSideEncryptionAlgorithm, ServerSideEncryptionRule,
+        StorageClass, TransferAcceleration, Versioning,
     },
     error::Error,
     request::{OssRequest, RequestMethod},
     util::{sanitize_etag, validate_bucket_name, validate_tag_key, validate_tag_value},
     Result,
 };
-
 
 ///
 /// Represents the access control list (ACL) for an bucket in Aliyun OSS.
@@ -84,7 +84,6 @@ impl TryFrom<&String> for BucketAcl {
         Self::try_from(s.as_str())
     }
 }
-
 
 /// Summary information of a bucket.
 #[derive(Debug, Clone, Default)]
@@ -246,7 +245,9 @@ impl BucketDetail {
                         "DataRedundancyType" => bucket.data_redundancy_type = DataRedundancyType::try_from(s)?,
                         "CrossRegionReplication" => bucket.cross_region_acceleration = CrossRegionReplication::try_from(s)?,
                         "TransferAcceleration" => bucket.transfer_acceleration = TransferAcceleration::try_from(s)?,
-                        "Grant" if tags.get(tags.len() - 2) == Some(&"AccessControlList".to_string()) => bucket.access_control_list.push(BucketAcl::try_from(s)?),
+                        "Grant" if tags.get(tags.len() - 2) == Some(&"AccessControlList".to_string()) => {
+                            bucket.access_control_list.push(BucketAcl::try_from(s)?)
+                        }
                         "SSEAlgorithm" if tags.get(tags.len() - 2) == Some(&"ServerSideEncryptionRule".to_string()) => sse_algorithm = s,
                         "KMSMasterKeyID" if tags.get(tags.len() - 2) == Some(&"ServerSideEncryptionRule".to_string()) => kms_master_key_id = s,
                         "KMSDataEncryption" if tags.get(tags.len() - 2) == Some(&"ServerSideEncryptionRule".to_string()) => kms_data_encryption = s,

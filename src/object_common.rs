@@ -88,7 +88,6 @@ impl TryFrom<&String> for ObjectAcl {
     }
 }
 
-
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
 pub enum ContentEncoding {

@@ -11,7 +11,7 @@ use crate::Result;
 #[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct PutObjectAclOptions {
-    pub version_id: Option<String>
+    pub version_id: Option<String>,
 }
 
 /// Options for getting object acl
@@ -19,7 +19,7 @@ pub struct PutObjectAclOptions {
 #[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde-camelcase", serde(rename_all = "camelCase"))]
 pub struct GetObjectAclOptions {
-    pub version_id: Option<String>
+    pub version_id: Option<String>,
 }
 
 pub(crate) fn parse_objcect_acl_from_xml(xml: &str) -> Result<ObjectAcl> {

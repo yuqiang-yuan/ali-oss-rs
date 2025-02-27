@@ -27,7 +27,7 @@ impl ObjectExtOperations for crate::blocking::Client {
     fn get_object_acl<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<GetObjectAclOptions>) -> Result<ObjectAcl>
     where
         S1: AsRef<str>,
-        S2: AsRef<str>
+        S2: AsRef<str>,
     {
         let request = build_get_object_acl_request(bucket_name.as_ref(), object_key.as_ref(), &options)?;
         let (_, content) = self.do_request::<String>(request)?;
@@ -40,7 +40,7 @@ impl ObjectExtOperations for crate::blocking::Client {
     fn put_object_acl<S1, S2>(&self, bucket_name: S1, object_key: S2, acl: ObjectAcl, options: Option<GetObjectAclOptions>) -> Result<()>
     where
         S1: AsRef<str>,
-        S2: AsRef<str>
+        S2: AsRef<str>,
     {
         let request = build_put_object_acl_request(bucket_name.as_ref(), object_key.as_ref(), acl, &options)?;
         let _ = self.do_request::<()>(request)?;
@@ -48,15 +48,17 @@ impl ObjectExtOperations for crate::blocking::Client {
     }
 }
 
-
-#[cfg(all(test, feature="blocking"))]
+#[cfg(all(test, feature = "blocking"))]
 mod test_object_ext_operations_blocking {
     use std::sync::Once;
 
     use reqwest::StatusCode;
     use uuid::Uuid;
 
-    use crate::{blocking::{object::ObjectOperations, object_ext::ObjectExtOperations, Client},  object_common::ObjectAcl};
+    use crate::{
+        blocking::{object::ObjectOperations, object_ext::ObjectExtOperations, Client},
+        object_common::ObjectAcl,
+    };
 
     static INIT: Once = Once::new();
 

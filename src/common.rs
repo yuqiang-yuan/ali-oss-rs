@@ -56,7 +56,6 @@ impl Owner {
     }
 }
 
-
 /// Represents the storage class for an object in Aliyun OSS.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serde-support", derive(serde::Serialize, serde::Deserialize))]
