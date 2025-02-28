@@ -69,22 +69,42 @@ pub(crate) fn sanitize_etag(s: String) -> String {
     tag.to_string()
 }
 
-// pub(crate) fn debug_request(req: &reqwest::Request) {
-//     debug!("Request Details:");
-//     debug!("---------------");
+/// Debug request
+#[allow(dead_code)]
+pub(crate) fn debug_request(req: &reqwest::Request) {
+    log::debug!("Request Details:");
+    log::debug!("---------------");
 
-//     // Method and URL
-//     debug!("Method: {}", req.method());
-//     debug!("URL: {}", req.url());
+    // Method and URL
+    log::debug!("Method: {}", req.method());
+    log::debug!("URL: {}", req.url());
 
-//     // Headers
-//     debug!("\nHeaders:");
-//     for (name, value) in req.headers() {
-//         debug!("  {}: {}", name, value.to_str().unwrap_or("[invalid]"));
-//     }
-//     // Version
-//     debug!("\nVersion: {:?}", req.version());
-// }
+    // Headers
+    log::debug!("\nHeaders:");
+    for (name, value) in req.headers() {
+        log::debug!("  {}: {}", name, value.to_str().unwrap_or("[invalid]"));
+    }
+    // Version
+    log::debug!("\nVersion: {:?}", req.version());
+}
+
+#[allow(dead_code)]
+pub(crate) fn debug_blocking_request(req: &reqwest::blocking::Request) {
+    log::debug!("Request Details:");
+    log::debug!("---------------");
+
+    // Method and URL
+    log::debug!("Method: {}", req.method());
+    log::debug!("URL: {}", req.url());
+
+    // Headers
+    log::debug!("\nHeaders:");
+    for (name, value) in req.headers() {
+        log::debug!("  {}: {}", name, value.to_str().unwrap_or("[invalid]"));
+    }
+    // Version
+    log::debug!("\nVersion: {:?}", req.version());
+}
 
 ///
 /// Bucket name validation.

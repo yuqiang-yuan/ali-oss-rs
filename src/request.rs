@@ -7,18 +7,21 @@ use std::{
 
 use crate::{common, util};
 
-// 首先定义 RequestBody 枚举
-#[derive(Debug, Default)]
-pub(crate) enum RequestBody {
+/// Request body
+#[derive(Debug, Default, Clone)]
+pub enum RequestBody {
     #[default]
     Empty,
     Text(String),
     Bytes(Vec<u8>),
+
+    /// `.1` is used when doing multipart uploads from file.
     File(PathBuf, Option<Range<u64>>),
 }
 
-#[derive(Clone, Copy, Debug)]
-pub(crate) enum RequestMethod {
+/// Request method
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RequestMethod {
     Get,
     Put,
     Post,
@@ -50,7 +53,8 @@ impl From<RequestMethod> for reqwest::Method {
     }
 }
 
-pub(crate) struct OssRequest {
+/// Raw oss request
+pub struct OssRequest {
     pub bucket_name: String,
     pub object_key: String,
     pub method: RequestMethod,
@@ -65,7 +69,19 @@ pub(crate) struct OssRequest {
     pub body: RequestBody,
 }
 
+impl Default for OssRequest {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+
 impl OssRequest {
+    /// Create a new instance with following headers are set:
+    ///
+    /// - `x-sdk-client`: `ali-oss-rs/{version_no}`
+    /// - `x-oss-content-sha256` is set to literal string `UNSIGNED-PAYLOAD`
+    /// - `x-oss-date` is set to current time. e.g. `20231203T121212Z`
     pub fn new() -> Self {
         let date_time_string = util::get_iso8601_date_time_string();
         Self {
@@ -83,23 +99,26 @@ impl OssRequest {
         }
     }
 
+    /// Set request method.
     pub fn method(mut self, m: RequestMethod) -> Self {
         self.method = m;
         self
     }
 
+    /// Set bucket name.
     pub fn bucket<S: Into<String>>(mut self, bucket_name: S) -> Self {
         self.bucket_name = bucket_name.into();
         self
     }
 
+    /// Set object key.
     pub fn object<S: Into<String>>(mut self, object_key: S) -> Self {
         self.object_key = object_key.into();
         self
     }
 
-    /// Add header to the builder.
-    /// and DO NOT treat this header as additional header
+    /// Add header to the builder and **DO NOT** treat this header as additional header.
+    /// The header name should be lowercase string. e.g. `content-type`, `x-oss-meta-my-key`.
     pub fn add_header<S1, S2>(self, k: S1, v: S2) -> Self
     where
         S1: AsRef<str>,
@@ -108,7 +127,7 @@ impl OssRequest {
         self.add_header_ext(k, v, false)
     }
 
-    /// Add header to the builder
+    /// Add header to the builder. The header name should be lowercase string. e.g. `content-type`, `x-oss-meta-my-key`.
     ///
     /// `addtional_header` identifies if the header name should be added to additional header,
     /// and being used when calculating canonical request and signature
@@ -125,6 +144,9 @@ impl OssRequest {
         self
     }
 
+    /// Add query parameters. Parameter names and values do not need to be URL encoded,
+    /// as they will be automatically encoded when calculating the signature.
+    /// For example: `add_query("userName", "张三")`.
     pub fn add_query<S1, S2>(mut self, k: S1, v: S2) -> Self
     where
         S1: AsRef<str>,
@@ -134,7 +156,7 @@ impl OssRequest {
         self
     }
 
-    /// Add only the header name to additional headers
+    /// Add the header name to additional headers which will be used in signature calculating.
     #[allow(dead_code)]
     pub fn add_additional_header_name<S>(mut self, name: S) -> Self
     where
@@ -144,34 +166,36 @@ impl OssRequest {
         self
     }
 
-    // 添加设置 body 的便捷方法
+    /// Set request body.
     pub fn body(mut self, body: RequestBody) -> Self {
         self.body = body;
         self
     }
 
-    /// helper method for [`body`]. only the body is set and left `content-length`, `content-type` untouched
+    /// helper method for [`Self::body`]. only the body is set and left `content-length`, `content-type` untouched.
     pub fn text_body(self, text: impl Into<String>) -> Self {
         self.body(RequestBody::Text(text.into()))
     }
 
     #[allow(dead_code)]
-    /// helper method for [`body`]. only the body is set and left `content-length`, `content-type` untouched
+    /// helper method for [`Self::body`]. only the body is set and left `content-length`, `content-type` untouched.
     pub fn bytes_body(self, bytes: impl Into<Vec<u8>>) -> Self {
         self.body(RequestBody::Bytes(bytes.into()))
     }
 
     #[allow(dead_code)]
-    /// helper method for [`body`]. only the body is set and left `content-length`, `content-type` untouched
+    /// helper method for [`Self::body`]. only the body is set and left `content-length`, `content-type` untouched.
     pub fn file_body(self, file_path: impl Into<PathBuf>) -> Self {
         self.body(RequestBody::File(file_path.into(), None))
     }
 
+    /// Set `content-type` header.
     pub fn content_type(mut self, content_type: &str) -> Self {
         self.headers.insert("content-type".to_string(), content_type.to_string());
         self
     }
 
+    /// Set `content-length` header.
     pub fn content_length(mut self, len: u64) -> Self {
         self.headers.insert("content-length".to_string(), len.to_string());
         self
@@ -193,7 +217,7 @@ impl OssRequest {
     }
 
     ///
-    /// 官方文档：https://help.aliyun.com/zh/oss/developer-reference/recommend-to-use-signature-version-4?spm=a2c4g.11186623.help-menu-31815.d_5_1_0_1_0_0.5dbf37b36yQEjT#c33cf04dcb1c3
+    /// 官方文档：<https://help.aliyun.com/zh/oss/developer-reference/recommend-to-use-signature-version-4>
     ///
     /// - 如果请求的 URI 中既包含 Bucket 也包含 Object，则 Canonical URI 填写示例为: `/examplebucket/exampleobject`
     /// - 如果请求的 URI 中只包含 Bucket 不包含 Object，则 Canonical URI 填写示例为： `/examplebucket/`
@@ -225,6 +249,7 @@ impl OssRequest {
     }
 
     /// 按 QueryString 的 key 进行排序。
+    ///
     /// - 先编码，再排序
     /// - 如果有多个相同的 key，按照原来添加的顺序放置即可
     /// - 中间使用 `&`进行连接。

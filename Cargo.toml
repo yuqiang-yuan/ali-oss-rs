@@ -1,10 +1,10 @@
 [package]
 name = "ali-oss-rs"
-version = "0.1.3"
+version = "0.2.0"
 edition = "2021"
 license = "MIT"
 rust-version = "1.80.1"
-description = "Aliyun OSS SDK for Rust。阿里云对象存储 Rust SDK"
+description = "阿里云对象存储 Rust SDK。 Aliyun OSS SDK for Rust"
 authors = ["Yuan YQ <yuqiang.yuan@163.com>"]
 repository = "https://github.com/yuqiang-yuan/ali-oss-rs"
 documentation = "https://docs.rs/ali-oss-rs"

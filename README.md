@@ -1,13 +1,11 @@
 # Aliyun OSS Rust SDK
 
-[![Crates.io Version](https://img.shields.io/crates/v/ali-oss-rs?_ts_=202502262317)](https://crates.io/crates/ali-oss-rs)
-![Crates.io MSRV](https://img.shields.io/crates/msrv/ali-oss-rs?_ts_=202502262317)
+[![Crates.io Version](https://img.shields.io/crates/v/ali-oss-rs?_ts_=202502281611)](https://crates.io/crates/ali-oss-rs)
+![Crates.io MSRV](https://img.shields.io/crates/msrv/ali-oss-rs?_ts_=202502281611)
 [![docs.rs](https://img.shields.io/docsrs/ali-oss-rs)](https://docs.rs/ali-oss-rs)
-[![Crates.io License](https://img.shields.io/crates/l/ali-oss-rs?_ts_=202502262317)](https://github.com/yuqiang-yuan/ali-oss-rs?tab=License-1-ov-file)
+[![Crates.io License](https://img.shields.io/crates/l/ali-oss-rs?_ts_=202502281611)](https://github.com/yuqiang-yuan/ali-oss-rs?tab=License-1-ov-file)
 
 [English](https://github.com/yuqiang-yuan/ali-oss-rs) | [中文](https://github.com/yuqiang-yuan/ali-oss-rs/blob/dev/README.zh-CN.md)
-
-*This project is under active development. Any feedback and contribution would be greatly appreciated.*
 
 Aliyun Object Storage Service (OSS) is a massive, secure, cost-effective, and highly reliable cloud storage service provided by Alibaba Cloud. Users can store and access any type of data at any time, from anywhere, using any internet device through simple REST interfaces. OSS provides SDKs in multiple programming languages to help developers quickly integrate with OSS services.
 
@@ -43,7 +41,6 @@ Aliyun Object Storage Service (OSS) is a massive, secure, cost-effective, and hi
   - Append object: from file, buffer and base64 string
   - Restore object
   - Clean restored object
-  - URL with signature for `GET` request
   - Multipart uploads: from file with range, buffer and base64 string.
   - Multipart uploads: list parts and abort multipart uploads
   - Abort multipart uploads
@@ -59,6 +56,9 @@ Aliyun Object Storage Service (OSS) is a massive, secure, cost-effective, and hi
     - Get tagging
     - Put tagging
     - Delete tagging
+- Misc
+  - Presigned url for `GET` request
+  - Presigned raw request for use the URL and headers in other framework, application or languages
 
 
 **Notice**: The `etag` in this library is sanitized by removing the leading and trailing double quotation marks (`"`). I don't understand why the ETag returned from the Aliyun API is wrapped in double quotation marks.

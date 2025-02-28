@@ -1,13 +1,11 @@
 # Aliyun OSS Rust SDK
 
-[![Crates.io Version](https://img.shields.io/crates/v/ali-oss-rs?_ts_=202502262317)](https://crates.io/crates/ali-oss-rs)
-![Crates.io MSRV](https://img.shields.io/crates/msrv/ali-oss-rs?_ts_=202502262317)
+[![Crates.io Version](https://img.shields.io/crates/v/ali-oss-rs?_ts_=202502281611)](https://crates.io/crates/ali-oss-rs)
+![Crates.io MSRV](https://img.shields.io/crates/msrv/ali-oss-rs?_ts_=202502281611)
 [![docs.rs](https://img.shields.io/docsrs/ali-oss-rs)](https://docs.rs/ali-oss-rs)
-[![Crates.io License](https://img.shields.io/crates/l/ali-oss-rs?_ts_=202502262317)](https://github.com/yuqiang-yuan/ali-oss-rs?tab=License-1-ov-file)
+[![Crates.io License](https://img.shields.io/crates/l/ali-oss-rs?_ts_=202502281611)](https://github.com/yuqiang-yuan/ali-oss-rs?tab=License-1-ov-file)
 
 [English](https://github.com/yuqiang-yuan/ali-oss-rs) | [中文](https://github.com/yuqiang-yuan/ali-oss-rs/blob/dev/README.zh-CN.md)
-
-*本项目还在积极开发中，欢迎试用以及提出 PR*
 
 阿里云对象存储 OSS（Object Storage Service）是阿里云提供的一种海量、安全、低成本、高可靠的云存储服务。
 用户可以通过简单的 REST 接口，在任何时间、任何地点，使用任何互联网设备存储和访问任意类型的数据。OSS 提供多种编程语言的 SDK，帮助开发者快速接入 OSS 服务。
@@ -45,7 +43,6 @@
   - 向 object 追加内容。支持从本地文件、字节数据、Base64 字符串追加
   - 解冻归档 object
   - 清理解冻的归档 object
-  - `GET` 请求的预签名 URL。主要是在浏览器中预览私有访问的 object
   - 分片上传：支持从文件、字节数据、Base64 字符串分片上传。支持回调
   - 分片上传：列出一个 bucket 中的未完成/未取消的碎片
   - 取消分片上传
@@ -61,7 +58,9 @@
     - 设置或更新标签
     - 获取标签信息
     - 删除标签
-
+- 其他
+  - 预签名 `GET` 请求的 URL，适用于在浏览器中预览私有访问的 object
+  - 预签名请求，返回 URL 和计算后的请求头，方便直接在其他语言或者框架中使用
 
 **注意**: 本项目中，`etag` 标签的首尾双引号（`"`）都被清理了（实在搞不懂未和在 ETag 前后都带有双引号）。从 API 返回的 ETag 清理之后再提取；需要提交 ETag 的调用，也会自动补充首尾双引号。对使用者而言，不用关心 ETag 上双引号的问题。
 
