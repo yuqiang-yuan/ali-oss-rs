@@ -16,6 +16,7 @@ use crate::{
 
 pub mod acl;
 pub mod bucket;
+pub mod cname;
 pub mod multipart;
 pub mod object;
 pub mod presign;

@@ -182,7 +182,7 @@ impl Client {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "blocking"))]
 mod test_presign {
     use std::{str::FromStr, sync::Once};
 

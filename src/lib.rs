@@ -3,6 +3,8 @@ pub mod acl;
 pub mod acl_common;
 pub mod bucket;
 pub mod bucket_common;
+pub mod cname;
+pub mod cname_common;
 pub mod common;
 pub mod error;
 pub mod multipart;
