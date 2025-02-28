@@ -89,6 +89,7 @@ pub(crate) fn debug_request(req: &reqwest::Request) {
 }
 
 #[allow(dead_code)]
+#[cfg(feature = "blocking")]
 pub(crate) fn debug_blocking_request(req: &reqwest::blocking::Request) {
     log::debug!("Request Details:");
     log::debug!("---------------");
