@@ -6,7 +6,7 @@ use quick_xml::events::Event;
 use crate::error::Error;
 use crate::Result;
 
-pub const VERSION: &str = "0.2.0";
+pub const VERSION: &str = "0.2.1";
 
 pub const MIME_TYPE_XML: &str = "application/xml";
 pub const DELETE_MULTIPLE_OBJECTS_LIMIT: usize = 1000;
