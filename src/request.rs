@@ -75,7 +75,6 @@ impl Default for OssRequest {
     }
 }
 
-
 impl OssRequest {
     /// Create a new instance with following headers are set:
     ///

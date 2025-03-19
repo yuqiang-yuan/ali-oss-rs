@@ -3,6 +3,8 @@ pub mod acl;
 pub mod acl_common;
 pub mod bucket;
 pub mod bucket_common;
+pub mod cname;
+pub mod cname_common;
 pub mod common;
 pub mod error;
 pub mod multipart;
@@ -395,6 +397,30 @@ impl Client {
             }
         } else {
             Ok((response_headers, T::from_response(response).await?))
+        }
+    }
+
+    /// Clone a new client instance with the same security data and different region.
+    /// This is helpful if you are operation on buckets across multiple regions with a single pair of access key id and secret.
+    pub fn clone_to<S1, S2>(&self, region: S1, endpoint: S2) -> Self
+    where
+        S1: AsRef<str>,
+        S2: AsRef<str>,
+    {
+        let endpoint = endpoint.as_ref();
+
+        let endpoint = if let Some(s) = endpoint.strip_prefix("http://") { s } else { endpoint };
+
+        let endpoint = if let Some(s) = endpoint.strip_prefix("https://") { s } else { endpoint };
+
+        Self {
+            access_key_id: self.access_key_id.clone(),
+            access_key_secret: self.access_key_secret.clone(),
+            region: region.as_ref().to_string(),
+            endpoint: endpoint.to_string(),
+            scheme: self.scheme.clone(),
+            sts_token: self.sts_token.clone(),
+            http_client: self.http_client.clone(),
         }
     }
 }
