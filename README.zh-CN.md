@@ -1,9 +1,9 @@
 # Aliyun OSS Rust SDK
 
-[![Crates.io Version](https://img.shields.io/crates/v/ali-oss-rs?_ts_=202503191035)](https://crates.io/crates/ali-oss-rs)
-![Crates.io MSRV](https://img.shields.io/crates/msrv/ali-oss-rs?_ts_=202503191035)
+[![Crates.io Version](https://img.shields.io/crates/v/ali-oss-rs?_ts_=20251009)](https://crates.io/crates/ali-oss-rs)
+![Crates.io MSRV](https://img.shields.io/crates/msrv/ali-oss-rs?_ts_=20251009)
 [![docs.rs](https://img.shields.io/docsrs/ali-oss-rs)](https://docs.rs/ali-oss-rs)
-[![Crates.io License](https://img.shields.io/crates/l/ali-oss-rs?_ts_=202503191035)](https://github.com/yuqiang-yuan/ali-oss-rs?tab=License-1-ov-file)
+[![Crates.io License](https://img.shields.io/crates/l/ali-oss-rs?_ts_=20251009)](https://github.com/yuqiang-yuan/ali-oss-rs?tab=License-1-ov-file)
 
 [English](https://github.com/yuqiang-yuan/ali-oss-rs) | [中文](https://github.com/yuqiang-yuan/ali-oss-rs/blob/dev/README.zh-CN.md)
 
@@ -34,7 +34,8 @@
 - Object
   - 创建 object。支持从本地文件、字节数据、Base64 字符串上传。支持回调
   - 创建目录
-  - 下载 oject 到本地文件
+  - 下载 object 到本地文件
+  - 下载 object 到内存
   - 获取 object 元数据
   - 获取 object 详细的元数据
   - 复制 object

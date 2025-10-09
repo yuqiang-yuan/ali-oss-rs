@@ -1,9 +1,9 @@
 # Aliyun OSS Rust SDK
 
-[![Crates.io Version](https://img.shields.io/crates/v/ali-oss-rs?_ts_=202503191035)](https://crates.io/crates/ali-oss-rs)
-![Crates.io MSRV](https://img.shields.io/crates/msrv/ali-oss-rs?_ts_=202503191035)
+[![Crates.io Version](https://img.shields.io/crates/v/ali-oss-rs?_ts_=20251009)](https://crates.io/crates/ali-oss-rs)
+![Crates.io MSRV](https://img.shields.io/crates/msrv/ali-oss-rs?_ts_=20251009)
 [![docs.rs](https://img.shields.io/docsrs/ali-oss-rs)](https://docs.rs/ali-oss-rs)
-[![Crates.io License](https://img.shields.io/crates/l/ali-oss-rs?_ts_=202503191035)](https://github.com/yuqiang-yuan/ali-oss-rs?tab=License-1-ov-file)
+[![Crates.io License](https://img.shields.io/crates/l/ali-oss-rs?_ts_=20251009)](https://github.com/yuqiang-yuan/ali-oss-rs?tab=License-1-ov-file)
 
 [English](https://github.com/yuqiang-yuan/ali-oss-rs) | [中文](https://github.com/yuqiang-yuan/ali-oss-rs/blob/dev/README.zh-CN.md)
 
@@ -33,6 +33,7 @@ Aliyun Object Storage Service (OSS) is a massive, secure, cost-effective, and hi
   - Put object: upload local file, buffer, base64 string with callback support
   - Put object: create a folder
   - Get object: download to local file
+  - Get object: download to memory
   - Get object metadata
   - Head object: get detail metadata of an object
   - Copy object

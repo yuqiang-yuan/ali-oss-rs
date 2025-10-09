@@ -409,6 +409,10 @@ impl BytesBody {
         self.0.copy_to(&mut file)?;
         Ok(())
     }
+
+    pub fn save_to_buffer(self) -> Result<Vec<u8>> {
+        Ok(self.0.bytes()?.to_vec())
+    }
 }
 
 impl FromResponse for BytesBody {

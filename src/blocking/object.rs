@@ -113,6 +113,14 @@ pub trait ObjectOperations {
         S2: AsRef<str>,
         P: AsRef<Path>;
 
+    /// Get object content into memory (bytes array).
+    ///
+    /// Large files can consume significant memory, exercise caution when using this function.
+    fn get_object_to_buffer<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<GetObjectOptions>) -> Result<Vec<u8>>
+    where
+        S1: AsRef<str> + Send,
+        S2: AsRef<str> + Send;
+
     /// Create a "folder"
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
@@ -424,6 +432,24 @@ impl ObjectOperations for Client {
         stream.save_to_file(file_path)?;
 
         Ok(GetObjectResult)
+    }
+
+    /// Get object content into memory (bytes array).
+    ///
+    /// Large files can consume significant memory, exercise caution when using this function.
+    fn get_object_to_buffer<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<GetObjectOptions>) -> Result<Vec<u8>>
+    where
+        S1: AsRef<str> + Send,
+        S2: AsRef<str> + Send
+    {
+        let bucket_name = bucket_name.as_ref();
+        let object_key = object_key.as_ref();
+
+        let request = build_get_object_request(bucket_name, object_key, &options)?;
+
+        let (_, stream) = self.do_request::<BytesBody>(request)?;
+
+        stream.save_to_buffer()
     }
 
     /// Create a "folder"
@@ -917,6 +943,18 @@ mod test_object_blocking {
 
             log::debug!("{}", result.unwrap_err());
         }
+    }
+
+    #[test]
+    fn test_get_object_to_buf_blocking() {
+        setup();
+        let client = Client::from_env();
+        let bucket_name = "mi-dev-public";
+        let object_key = "quiz_template.xls";
+        // 9b98f68671ec239958e58a6813960ab5
+        let buf = client.get_object_to_buffer(bucket_name, object_key, None).unwrap();
+        let d = md5::compute(&buf).to_vec();
+        assert_eq!(hex::encode(&d), "9b98f68671ec239958e58a6813960ab5");
     }
 
     #[test]

@@ -121,6 +121,14 @@ pub trait ObjectOperations {
         S2: AsRef<str> + Send,
         P: AsRef<Path> + Send;
 
+    /// Get object content into memory (bytes array).
+    ///
+    /// Large files can consume significant memory, exercise caution when using this function.
+    async fn get_object_to_buffer<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<GetObjectOptions>) -> Result<Vec<u8>>
+    where
+        S1: AsRef<str> + Send,
+        S2: AsRef<str> + Send;
+
     /// Create a "folder"
     ///
     /// Official document: <https://help.aliyun.com/zh/oss/developer-reference/putobject>
@@ -447,6 +455,32 @@ impl ObjectOperations for Client {
         file.flush().await?;
 
         Ok(GetObjectResult)
+    }
+
+    /// Get object content into memory (bytes array).
+    ///
+    /// Large files can consume significant memory, exercise caution when using this function.
+    async fn get_object_to_buffer<S1, S2>(&self, bucket_name: S1, object_key: S2, options: Option<GetObjectOptions>) -> Result<Vec<u8>>
+    where
+        S1: AsRef<str> + Send,
+        S2: AsRef<str> + Send
+    {
+        let bucket_name = bucket_name.as_ref();
+        let object_key = object_key.as_ref();
+
+        let request = build_get_object_request(bucket_name, object_key, &options)?;
+
+        let (_, mut stream) = self.do_request::<ByteStream>(request).await?;
+
+        let mut buf = Vec::new();
+
+        while let Some(chunk) = stream.try_next().await? {
+            buf.write_all(&chunk).await?;
+        }
+
+        buf.flush().await?;
+
+        Ok(buf)
     }
 
     /// Create a "folder".
@@ -957,6 +991,18 @@ mod test_object_async {
 
             log::debug!("{}", result.unwrap_err());
         }
+    }
+
+    #[tokio::test]
+    async fn test_get_object_to_buf_async() {
+        setup();
+        let client = Client::from_env();
+        let bucket_name = "mi-dev-public";
+        let object_key = "quiz_template.xls";
+        // 9b98f68671ec239958e58a6813960ab5
+        let buf = client.get_object_to_buffer(bucket_name, object_key, None).await.unwrap();
+        let d = md5::compute(&buf).to_vec();
+        assert_eq!(hex::encode(&d), "9b98f68671ec239958e58a6813960ab5");
     }
 
     #[tokio::test]
