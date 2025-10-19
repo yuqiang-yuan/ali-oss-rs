@@ -41,7 +41,8 @@ pub(crate) fn get_http_date() -> String {
 /// Find region from endpoint string
 pub(crate) fn get_region_from_endpoint<S: AsRef<str>>(endpoint: S) -> Result<String, String> {
     match endpoint.as_ref().find(".") {
-        Some(idx) => Ok(endpoint.as_ref()[..idx - 1].replace("oss-", "").to_string()),
+        // endpoint[..id] == [0..id-1]
+        Some(idx) => Ok(endpoint.as_ref()[..idx].replace("oss-", "").to_string()),
         None => Err(format!("can not extract region id from endpoint: {}", endpoint.as_ref())),
     }
 }
@@ -221,7 +222,7 @@ pub(crate) fn file_md5(file: impl AsRef<Path>) -> String {
 
 #[cfg(test)]
 mod test_util {
-    use crate::util::{get_http_date, get_iso8601_date_string};
+    use crate::util::{get_http_date, get_iso8601_date_string, get_region_from_endpoint};
 
     use super::get_iso8601_date_time_string;
 
@@ -269,5 +270,12 @@ mod test_util {
         // Test path component length
         assert!(validate_path("/path/normal_length_folder/file.txt"));
         assert!(!validate_path("/path/very_long_folder_name_that_exceeds_255_characters_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/file.txt"));
+    }
+
+    #[test]
+    fn test_get_region_from_endpoint() {
+        let endpoint = "oss-cn-hangzhou.aliyuncs.com";
+        let region = get_region_from_endpoint(endpoint).unwrap();
+        assert_eq!(region, "cn-hangzhou");
     }
 }
