@@ -158,7 +158,7 @@ impl ClientBuilder {
         Ok(Client {
             access_key_id,
             access_key_secret,
-            endpoint,
+            endpoint: lc_endpoint,
             region,
             scheme,
             sts_token,
@@ -455,4 +455,13 @@ impl FromResponse for ByteStream {
         let stream = response.bytes_stream();
         Ok(Box::pin(stream))
     }
+}
+
+#[test]
+fn test_client_build() {
+    let config = ClientBuilder::new("access_key_id", "access_key_secret", "https://oss-cn-hangzhou.aliyuncs.com").build().unwrap();
+    assert_eq!(config.region, "cn-hangzhou");
+    assert_eq!(config.scheme, "https");
+    assert_eq!(config.endpoint, "oss-cn-hangzhou.aliyuncs.com");
+
 }
