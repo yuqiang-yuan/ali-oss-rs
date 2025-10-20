@@ -463,5 +463,4 @@ fn test_client_build() {
     assert_eq!(config.region, "cn-hangzhou");
     assert_eq!(config.scheme, "https");
     assert_eq!(config.endpoint, "oss-cn-hangzhou.aliyuncs.com");
-
 }
