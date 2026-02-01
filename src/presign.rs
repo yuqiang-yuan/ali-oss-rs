@@ -22,7 +22,7 @@ pub struct SignedOssRequest {
 }
 
 impl Client {
-    /// Presign URL for GET request without any additional headers supported, for brower mostly
+    /// Presign URL for GET request without any additional headers supported, for browser mostly
     pub fn presign_url<S1, S2>(&self, bucket_name: S1, object_key: S2, options: PresignGetOptions) -> String
     where
         S1: AsRef<str>,
