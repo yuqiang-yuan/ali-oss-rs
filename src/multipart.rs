@@ -341,14 +341,9 @@ mod test_multipart_async {
     use uuid::Uuid;
 
     use crate::{
-        multipart::MultipartUploadsOperations,
-        multipart_common::{
-            CompleteMultipartUploadOptions, CompleteMultipartUploadRequest, CompleteMultipartUploadResult, UploadPartCopyOptionsBuilder, UploadPartCopyRequest,
-            UploadPartRequest,
-        },
-        object::ObjectOperations,
-        object_common::{CallbackBodyParameter, CallbackBuilder},
-        Client,
+        Client, multipart::MultipartUploadsOperations, multipart_common::{
+            CompleteMultipartUploadOptions, CompleteMultipartUploadRequest, CompleteMultipartUploadResult, InitiateMultipartUploadOptionsBuilder, UploadPartCopyOptionsBuilder, UploadPartCopyRequest, UploadPartRequest
+        }, object::ObjectOperations, object_common::{CallbackBodyParameter, CallbackBuilder}
     };
 
     static INIT: Once = Once::new();
@@ -404,17 +399,17 @@ mod test_multipart_async {
 
     #[tokio::test]
     async fn test_multipart_uploads_from_file_async() {
-        setup();
+        setup_comp();
 
         let client = Client::from_env();
 
-        let bucket = "yuanyq";
-        let object = format!("rust-sdk-test/multipart-{}.deb", Uuid::new_v4());
-        let file = "/home/yuanyq/Downloads/sourcegit_2025.06-1_amd64.deb";
+        let bucket = "mi-dev-private";
+        let object = format!("yuanyu-test/rust-sdk-test/multipart-{}.deb", Uuid::new_v4());
+        let file = "/home/yuanyq/Downloads/apifox_2.8.11_amd64.deb";
 
         let meta = std::fs::metadata(file).unwrap();
 
-        let slice_len: u64 = 5 * 1024 * 1024;
+        let slice_len: u64 = 50 * 1024 * 1024;
         let mut ranges = vec![];
         let mut c = 0;
         loop {
@@ -435,7 +430,9 @@ mod test_multipart_async {
 
         log::debug!("{:#?}", ranges);
 
-        let init_response = client.initiate_multipart_uploads(bucket, &object, None).await;
+        let opt = InitiateMultipartUploadOptionsBuilder::new().parameter("sequential", "").build();
+
+        let init_response = client.initiate_multipart_uploads(bucket, &object, Some(opt)).await;
         assert!(init_response.is_ok());
 
         let init_result = init_response.unwrap();

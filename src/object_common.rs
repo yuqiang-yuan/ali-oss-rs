@@ -235,11 +235,18 @@ pub struct PutObjectOptions {
     pub metadata: HashMap<String, String>,
 
     /// Object 标签
+    ///
     /// 签合法字符集包括大小写字母、数字、空格和下列符号：`+ - = . _ : /`。
     pub tags: HashMap<String, String>,
 
     /// For `put_object` only.
     pub callback: Option<Callback>,
+
+    /// 额外的 URI 查询参数。
+    ///
+    /// 主要是初始化分片上传的时候，有一个额外参数 `sequential`，
+    /// 但是这个参数在官方文档上都没有说明，所以就放到这里吧，有需要的话就使用
+    pub parameters: HashMap<String, String>,
 }
 
 pub struct PutObjectOptionsBuilder {
@@ -258,6 +265,7 @@ pub struct PutObjectOptionsBuilder {
     metadata: HashMap<String, String>,
     tags: HashMap<String, String>,
     callback: Option<Callback>,
+    parameters: HashMap<String, String>,
 }
 
 impl PutObjectOptionsBuilder {
@@ -278,6 +286,7 @@ impl PutObjectOptionsBuilder {
             metadata: HashMap::new(),
             tags: HashMap::new(),
             callback: None,
+            parameters: HashMap::new(),
         }
     }
 
@@ -356,6 +365,11 @@ impl PutObjectOptionsBuilder {
         self
     }
 
+    pub fn parameter(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.parameters.insert(key.into(), value.into());
+        self
+    }
+
     pub fn build(self) -> PutObjectOptions {
         PutObjectOptions {
             mime_type: self.mime_type,
@@ -373,6 +387,7 @@ impl PutObjectOptionsBuilder {
             metadata: self.metadata,
             tags: self.tags,
             callback: self.callback,
+            parameters: self.parameters,
         }
     }
 }
@@ -617,6 +632,12 @@ pub(crate) fn build_put_object_request(
     }
 
     let mut request = OssRequest::new().method(RequestMethod::Put).bucket(bucket_name).object(object_key);
+
+    if let Some(options) = &options {
+        for (k, v) in &options.parameters {
+            request = request.add_query(k.clone(), v.clone());
+        }
+    }
 
     let content_length = match &request_body {
         RequestBody::Empty => 0u64,
