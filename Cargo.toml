@@ -1,6 +1,6 @@
 [package]
 name = "ali-oss-rs"
-version = "0.2.4"
+version = "0.2.5"
 edition = "2021"
 license = "MIT"
 rust-version = "1.80.1"
