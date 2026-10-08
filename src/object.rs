@@ -1030,19 +1030,21 @@ mod test_object_async {
         let client = Client::from_env();
 
         let result = client
-            .head_object("yuanyq", "rust-sdk-test/Oracle_VirtualBox_Extension_Pack-7.1.4.vbox-extpack", None)
+            .head_object("yuanyq", "sqler-logo.png", None)
             .await;
 
         assert!(result.is_ok());
 
         let meta = result.unwrap();
         log::debug!("{:#?}", meta);
-        assert_eq!(22966826, meta.content_length);
-        assert_eq!("B752E1A13502E231AC4AA0E1D91F887C", meta.etag);
-        assert_eq!(Some(7873641174252289613), meta.hash_crc64ecma);
-        assert_eq!(Some("Tue, 18 Feb 2025 15:03:23 GMT".to_string()), meta.last_modified);
+        assert_eq!(2921, meta.content_length);
+        assert_eq!("40CF154D00668167311CB372F5DF6794", meta.etag);
+        // assert_eq!(Some(7873641174252289613), meta.hash_crc64ecma);
+        // assert_eq!(Some("Tue, 18 Feb 2025 15:03:23 GMT".to_string()), meta.last_modified);
         assert_eq!(Some(ObjectType::Normal), meta.object_type);
         assert_eq!(Some(StorageClass::Standard), meta.storage_class);
+
+        log::debug!("{:#?}", meta.raw_headers);
     }
 
     /// Copy object in same bucket

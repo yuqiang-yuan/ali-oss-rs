@@ -911,64 +911,110 @@ pub struct ObjectMetadata {
 
     /// `x-oss-meta-` 开头的用户自定义属性
     pub metadata: HashMap<String, String>,
+
+    /// 所有未被单独解析的原始响应头（不含 `x-oss-meta-*` 用户自定义属性）。
+    /// 适合需要访问 SDK 未建模的响应头时使用。
+    #[cfg_attr(feature = "serde-support", serde(default))]
+    pub raw_headers: HashMap<String, String>,
 }
 
 impl From<HashMap<String, String>> for ObjectMetadata {
     /// Consumes the headers map and return ObjectMetadata
     fn from(mut headers: HashMap<String, String>) -> Self {
-        Self {
-            request_id: headers.remove("x-oss-request-id").unwrap_or("".to_string()),
-            content_length: headers.remove("content-length").unwrap_or("0".to_string()).parse().unwrap_or(0),
-            etag: sanitize_etag(headers.remove("etag").unwrap_or_default()),
-            hash_crc64ecma: headers.remove("x-oss-hash-crc64ecma").map(|s| s.parse::<u64>().unwrap_or(0)),
-            transition_time: headers.remove("x-oss-transition-time"),
-            last_access_time: headers.remove("x-oss-last-access-time"),
-            last_modified: headers.remove("last-modified"),
-            version_id: headers.remove("x-oss-version-id"),
-            server_side_encryption: if let Some(s) = headers.remove("x-oss-server-side-encryption") {
-                // Not good...
-                if let Ok(v) = s.try_into() {
-                    Some(v)
-                } else {
-                    None
-                }
+        let request_id = headers.remove("x-oss-request-id").unwrap_or("".to_string());
+        let content_length = headers
+            .remove("content-length")
+            .unwrap_or("0".to_string())
+            .parse()
+            .unwrap_or(0);
+        let etag = sanitize_etag(headers.remove("etag").unwrap_or_default());
+        let hash_crc64ecma = headers
+            .remove("x-oss-hash-crc64ecma")
+            .map(|s| s.parse::<u64>().unwrap_or(0));
+        let transition_time = headers.remove("x-oss-transition-time");
+        let last_access_time = headers.remove("x-oss-last-access-time");
+        let last_modified = headers.remove("last-modified");
+        let version_id = headers.remove("x-oss-version-id");
+        let server_side_encryption = if let Some(s) = headers.remove("x-oss-server-side-encryption") {
+            // Not good...
+            if let Ok(v) = s.try_into() {
+                Some(v)
             } else {
                 None
-            },
-            server_side_encryption_key_id: headers.remove("x-oss-server-side-encryption-key-id"),
-            storage_class: if let Some(s) = headers.remove("x-oss-storage-class") {
-                if let Ok(v) = s.try_into() {
-                    Some(v)
-                } else {
-                    None
-                }
+            }
+        } else {
+            None
+        };
+        let server_side_encryption_key_id = headers.remove("x-oss-server-side-encryption-key-id");
+        let storage_class = if let Some(s) = headers.remove("x-oss-storage-class") {
+            if let Ok(v) = s.try_into() {
+                Some(v)
             } else {
                 None
-            },
-            object_type: if let Some(s) = headers.remove("x-oss-object-type") {
-                if let Ok(v) = s.try_into() {
-                    Some(v)
-                } else {
-                    None
-                }
+            }
+        } else {
+            None
+        };
+        let object_type = if let Some(s) = headers.remove("x-oss-object-type") {
+            if let Ok(v) = s.try_into() {
+                Some(v)
             } else {
                 None
-            },
-            next_append_position: headers.remove("x-oss-next-append-position").map(|s| s.parse().unwrap_or(0)),
-            expiration: headers.remove("x-oss-expiration"),
-            restore: headers.remove("x-oss-restore"),
-            process_status: headers.remove("x-oss-process-status"),
-            request_charged: headers.remove("x-oss-request-charged"),
-            content_md5: headers.remove("content-md5"),
-            access_control_allow_origin: headers.remove("access-control-allow-origin"),
-            access_control_allow_methods: headers.remove("access-control-allow-methods"),
-            access_control_allow_headers: headers.remove("access-control-allow-headers"),
-            access_control_allow_max_age: headers.remove("access-control-max-age"),
-            access_control_expose_headers: headers.remove("access-control-expose-headers"),
-            tag_count: headers.remove("x-oss-tagging-count").map(|s| s.parse().unwrap_or(0)),
+            }
+        } else {
+            None
+        };
+        let next_append_position = headers
+            .remove("x-oss-next-append-position")
+            .map(|s| s.parse().unwrap_or(0));
+        let expiration = headers.remove("x-oss-expiration");
+        let restore = headers.remove("x-oss-restore");
+        let process_status = headers.remove("x-oss-process-status");
+        let request_charged = headers.remove("x-oss-request-charged");
+        let content_md5 = headers.remove("content-md5");
+        let access_control_allow_origin = headers.remove("access-control-allow-origin");
+        let access_control_allow_methods = headers.remove("access-control-allow-methods");
+        let access_control_allow_headers = headers.remove("access-control-allow-headers");
+        let access_control_allow_max_age = headers.remove("access-control-max-age");
+        let access_control_expose_headers = headers.remove("access-control-expose-headers");
+        let tag_count = headers
+            .remove("x-oss-tagging-count")
+            .map(|s| s.parse().unwrap_or(0));
 
-            // CAUTION!! must be the last field to handle because `drain` consumes all the entries left in the map
-            metadata: headers.drain().filter(|(k, _)| k.starts_with("x-oss-meta-")).collect(),
+        // CAUTION!! must be the last step because `drain` consumes all the entries left in the map.
+        // `metadata` 只保留 `x-oss-meta-` 开头的用户自定义属性；
+        // 其余未被单独解析的原始响应头放入 `raw_headers`。
+        let (metadata, raw_headers) = headers
+            .drain()
+            .partition::<HashMap<String, String>, _>(|(k, _)| k.starts_with("x-oss-meta-"));
+
+        Self {
+            request_id,
+            content_length,
+            etag,
+            hash_crc64ecma,
+            transition_time,
+            last_access_time,
+            last_modified,
+            version_id,
+            server_side_encryption,
+            server_side_encryption_key_id,
+            storage_class,
+            object_type,
+            next_append_position,
+            expiration,
+            restore,
+            process_status,
+            request_charged,
+            content_md5,
+            access_control_allow_origin,
+            access_control_allow_methods,
+            access_control_allow_headers,
+            access_control_allow_max_age,
+            access_control_expose_headers,
+            tag_count,
+            metadata,
+            raw_headers,
         }
     }
 }
