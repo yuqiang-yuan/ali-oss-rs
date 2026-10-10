@@ -67,6 +67,11 @@ pub struct OssRequest {
     pub query: HashMap<String, String>,
 
     pub body: RequestBody,
+
+    /// 上传进度回调。只有带请求体的请求才会用到它，下载请求不会设置这个字段。
+    ///
+    /// 见 [`crate::progress`] 了解回调契约。
+    pub progress: Option<crate::progress::ProgressFn>,
 }
 
 impl Default for OssRequest {
@@ -95,6 +100,7 @@ impl OssRequest {
             additional_headers: HashSet::new(),
             query: HashMap::new(),
             body: RequestBody::Empty,
+            progress: None,
         }
     }
 
@@ -168,6 +174,13 @@ impl OssRequest {
     /// Set request body.
     pub fn body(mut self, body: RequestBody) -> Self {
         self.body = body;
+        self
+    }
+
+    /// Set the upload progress callback. It is only invoked while the request body is being sent,
+    /// so it has no effect on requests without a body.
+    pub fn progress(mut self, progress: crate::progress::ProgressFn) -> Self {
+        self.progress = Some(progress);
         self
     }
 

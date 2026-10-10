@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     fs::File,
-    io::{Read, Seek},
+    io::{Read, Seek, Write},
     path::Path,
     str::FromStr,
 };
@@ -11,7 +11,9 @@ use url::Url;
 
 use crate::{
     error::{Error, ErrorResponse},
-    get_region_from_endpoint, hmac_sha256, util, RequestBody, Result,
+    get_region_from_endpoint, hmac_sha256,
+    progress::{ProgressFn, ProgressReader},
+    util, RequestBody, Result,
 };
 
 pub mod acl;
@@ -303,27 +305,74 @@ impl Client {
             .request(oss_request.method.into(), Url::parse(&full_url)?)
             .headers(header_map);
 
+        let progress = oss_request.progress.take();
+
+        // 内存中的 body 没法分块上报进度，只能等整个 body 交给底层传输之后再补一次完成事件。
+        // 这里记录 (回调, 总长度)，在 execute 之后触发。
+        let mut in_memory_progress = None;
+
         // 根据 body 类型设置请求体
         req_builder = match oss_request.body {
             RequestBody::Empty => req_builder,
-            RequestBody::Text(text) => req_builder.body(text),
-            RequestBody::Bytes(bytes) => req_builder.body(bytes),
-            RequestBody::File(path, range) => {
-                if let Some(range) = range {
-                    let mut file = std::fs::File::open(path)?;
-                    file.seek(std::io::SeekFrom::Start(range.start))?;
-                    let limited_reader = file.take(range.end - range.start);
-                    req_builder.body(reqwest::blocking::Body::new(limited_reader))
-                } else {
-                    let file = File::open(path)?;
-                    req_builder.body(file)
+            RequestBody::Text(text) => {
+                if let Some(cb) = progress {
+                    let len = text.len() as u64;
+                    cb(0, Some(len));
+                    in_memory_progress = Some((cb, len));
                 }
+
+                req_builder.body(text)
             }
+            RequestBody::Bytes(bytes) => {
+                if let Some(cb) = progress {
+                    let len = bytes.len() as u64;
+                    cb(0, Some(len));
+                    in_memory_progress = Some((cb, len));
+                }
+
+                req_builder.body(bytes)
+            }
+            RequestBody::File(path, range) => match progress {
+                None => {
+                    if let Some(range) = range {
+                        let mut file = std::fs::File::open(path)?;
+                        file.seek(std::io::SeekFrom::Start(range.start))?;
+                        let limited_reader = file.take(range.end - range.start);
+                        req_builder.body(reqwest::blocking::Body::new(limited_reader))
+                    } else {
+                        let file = File::open(path)?;
+                        req_builder.body(file)
+                    }
+                }
+                Some(cb) => {
+                    let mut file = File::open(path)?;
+
+                    // 不从 `content-length` 头取长度：直接用文件元数据 / range，避免依赖调用方
+                    // 是否设置了那个头。
+                    let (start, len) = match range {
+                        Some(range) => (range.start, range.end - range.start),
+                        None => (0, file.metadata()?.len()),
+                    };
+
+                    if start > 0 {
+                        file.seek(std::io::SeekFrom::Start(start))?;
+                    }
+
+                    cb(0, Some(len));
+
+                    let limited_reader = file.take(len);
+                    req_builder.body(reqwest::blocking::Body::new(ProgressReader::new(limited_reader, cb, Some(len))))
+                }
+            },
         };
 
         let req = req_builder.build()?;
 
         let response = self.blocking_http_client.execute(req)?;
+
+        if let Some((cb, len)) = in_memory_progress {
+            cb(len, Some(len));
+        }
 
         let mut response_headers = HashMap::new();
 
@@ -404,15 +453,63 @@ impl FromResponse for Vec<u8> {
 pub(crate) struct BytesBody(reqwest::blocking::Response);
 
 impl BytesBody {
-    pub fn save_to_file<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
+    /// 把响应体写入文件。
+    ///
+    /// 传入了 `progress` 时会改用带进度上报的读写循环，并先触发一次 `(0, total)`。
+    pub fn save_to_file<P: AsRef<Path>>(&mut self, path: P, progress: Option<ProgressFn>, total: Option<u64>) -> Result<()> {
         let mut file = File::create(path)?;
-        self.0.copy_to(&mut file)?;
+
+        match progress {
+            Some(cb) => copy_with_progress(&mut self.0, &mut file, cb, total)?,
+            None => {
+                self.0.copy_to(&mut file)?;
+            }
+        }
+
         Ok(())
     }
 
-    pub fn save_to_buffer(self) -> Result<Vec<u8>> {
-        Ok(self.0.bytes()?.to_vec())
+    /// 把响应体读进内存。
+    ///
+    /// 传入了 `progress` 时会改用带进度上报的读写循环，并先触发一次 `(0, total)`。
+    pub fn save_to_buffer(mut self, progress: Option<ProgressFn>, total: Option<u64>) -> Result<Vec<u8>> {
+        match progress {
+            Some(cb) => {
+                let mut buf = Vec::new();
+                copy_with_progress(&mut self.0, &mut buf, cb, total)?;
+                Ok(buf)
+            }
+            None => Ok(self.0.bytes()?.to_vec()),
+        }
     }
+}
+
+/// 手写的读写循环，每读完一块就触发一次进度回调。
+///
+/// 不能用 [`std::io::copy`]，因为它没有钩子。
+fn copy_with_progress<R: Read, W: Write>(reader: &mut R, writer: &mut W, cb: ProgressFn, total: Option<u64>) -> Result<()> {
+    let mut buf = vec![0u8; crate::progress::CHUNK_SIZE];
+    let mut transferred = 0u64;
+
+    cb(0, total);
+
+    loop {
+        match reader.read(&mut buf) {
+            Ok(0) => break,
+            Ok(n) => {
+                writer.write_all(&buf[..n])?;
+                transferred += n as u64;
+                cb(transferred, total);
+            }
+            // 读到一半被信号打断不是错误，继续读
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(e) => return Err(e.into()),
+        }
+    }
+
+    writer.flush()?;
+
+    Ok(())
 }
 
 impl FromResponse for BytesBody {
@@ -433,4 +530,222 @@ fn test_client_build() {
     assert_eq!(config.region, "cn-hangzhou");
     assert_eq!(config.scheme, "https");
     assert_eq!(config.endpoint, "oss-cn-hangzhou.aliyuncs.com");
+}
+
+/// 同步上传进度的离线测试：起一个本地 TCP 服务器当 OSS，不依赖网络和凭证。
+#[cfg(all(test, feature = "blocking"))]
+mod test_upload_progress_blocking {
+    use std::{
+        collections::HashMap,
+        io::{Read, Write},
+        net::{SocketAddr, TcpListener},
+        sync::{Arc, Mutex},
+        thread,
+    };
+
+    use crate::{
+        progress::ProgressFn,
+        request::{OssRequest, RequestMethod},
+        RequestBody, Result,
+    };
+
+    use super::{BytesBody, Client};
+
+    fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+        haystack.windows(needle.len()).position(|w| w == needle)
+    }
+
+    /// 起一个只处理一个连接的 HTTP 服务器，返回它收到的 `(原始请求头, 请求体)`。
+    fn spawn_server() -> (SocketAddr, thread::JoinHandle<(String, Vec<u8>)>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        let handle = thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+
+            let mut buf = Vec::new();
+            let mut tmp = [0u8; 8192];
+
+            // 先读到请求头结束
+            let head_end = loop {
+                let n = socket.read(&mut tmp).unwrap();
+                assert!(n > 0, "连接在请求头读完之前就关闭了");
+
+                buf.extend_from_slice(&tmp[..n]);
+
+                if let Some(pos) = find_subslice(&buf, b"\r\n\r\n") {
+                    break pos + 4;
+                }
+            };
+
+            let head = String::from_utf8_lossy(&buf[..head_end]).to_string();
+
+            let content_length: usize = head
+                .lines()
+                .find_map(|line| {
+                    let (k, v) = line.split_once(':')?;
+                    if k.eq_ignore_ascii_case("content-length") {
+                        v.trim().parse().ok()
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or(0);
+
+            // 再读满请求体
+            while buf.len() < head_end + content_length {
+                let n = socket.read(&mut tmp).unwrap();
+                if n == 0 {
+                    break;
+                }
+                buf.extend_from_slice(&tmp[..n]);
+            }
+
+            let body = buf[head_end..].to_vec();
+
+            socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok").unwrap();
+            socket.flush().unwrap();
+
+            (head, body)
+        });
+
+        (addr, handle)
+    }
+
+    fn client_for(addr: SocketAddr) -> Client {
+        Client {
+            access_key_id: "test_access_key_id".to_string(),
+            access_key_secret: "test_access_key_secret".to_string(),
+            region: "cn-hangzhou".to_string(),
+            endpoint: addr.to_string(),
+            scheme: "http".to_string(),
+            sts_token: None,
+            blocking_http_client: reqwest::blocking::Client::new(),
+        }
+    }
+
+    /// 收集到的进度事件。
+    type Events = Arc<Mutex<Vec<(u64, Option<u64>)>>>;
+
+    fn recorder() -> (Events, ProgressFn) {
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let cloned = events.clone();
+
+        let callback: ProgressFn = Arc::new(move |transferred, total| {
+            cloned.lock().unwrap().push((transferred, total));
+        });
+
+        (events, callback)
+    }
+
+    #[test]
+    fn test_file_upload_progress_keeps_content_length_framing() {
+        let (addr, server) = spawn_server();
+
+        let payload = vec![b'x'; 200 * 1024];
+
+        let dir = std::env::temp_dir().join(format!("ali-oss-rs-blocking-progress-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file_path = dir.join("payload.bin");
+        std::fs::write(&file_path, &payload).unwrap();
+
+        let (events, callback) = recorder();
+
+        let request = OssRequest::new()
+            .method(RequestMethod::Put)
+            .object("payload.bin")
+            .content_length(payload.len() as u64)
+            .body(RequestBody::File(file_path.clone(), None))
+            .progress(callback);
+
+        let result: Result<(HashMap<String, String>, String)> = client_for(addr).do_request(request);
+        assert!(result.is_ok(), "{:?}", result.err());
+
+        let (head, body) = server.join().unwrap();
+
+        let lower = head.to_lowercase();
+        assert!(lower.contains(&format!("content-length: {}", payload.len())), "请求头里没有正确的 content-length:\n{}", head);
+        assert!(!lower.contains("transfer-encoding"), "请求被降级成了 chunked:\n{}", head);
+        assert_eq!(body, payload);
+
+        let events = events.lock().unwrap();
+        let total = payload.len() as u64;
+
+        assert_eq!(events.first(), Some(&(0, Some(total))), "首个事件应该是 (0, total)：{:?}", *events);
+        assert_eq!(events.last(), Some(&(total, Some(total))), "最后一个事件应该是 (total, total)：{:?}", *events);
+        assert!(events.windows(2).all(|w| w[0].0 < w[1].0), "进度不是单调递增的：{:?}", *events);
+
+        std::fs::remove_file(&file_path).ok();
+    }
+
+    #[test]
+    fn test_buffer_upload_progress_reports_boundaries_only() {
+        let (addr, server) = spawn_server();
+
+        let payload = vec![b'z'; 32 * 1024];
+        let (events, callback) = recorder();
+
+        let request = OssRequest::new()
+            .method(RequestMethod::Put)
+            .object("payload.bin")
+            .content_length(payload.len() as u64)
+            .body(RequestBody::Bytes(payload.clone()))
+            .progress(callback);
+
+        let result: Result<(HashMap<String, String>, String)> = client_for(addr).do_request(request);
+        assert!(result.is_ok(), "{:?}", result.err());
+
+        let (_, body) = server.join().unwrap();
+        assert_eq!(body, payload);
+
+        let events = events.lock().unwrap();
+        let total = payload.len() as u64;
+        assert_eq!(*events, vec![(0, Some(total)), (total, Some(total))]);
+    }
+
+    #[test]
+    fn test_empty_body_triggers_no_progress() {
+        let (addr, server) = spawn_server();
+
+        let (events, callback) = recorder();
+
+        let request = OssRequest::new()
+            .method(RequestMethod::Post)
+            .object("payload.bin")
+            .body(RequestBody::Empty)
+            .progress(callback);
+
+        let result: Result<(HashMap<String, String>, String)> = client_for(addr).do_request(request);
+        assert!(result.is_ok(), "{:?}", result.err());
+
+        let _ = server.join().unwrap();
+
+        assert!(events.lock().unwrap().is_empty(), "空请求体不应该触发进度回调");
+    }
+
+    /// 让 `save_to_buffer` 的进度路径也被覆盖到。
+    #[test]
+    fn test_save_to_buffer_with_progress() {
+        let (addr, server) = spawn_server();
+
+        let (events, callback) = recorder();
+
+        let request = OssRequest::new()
+            .method(RequestMethod::Put)
+            .object("payload.bin")
+            .content_length(4)
+            .body(RequestBody::Bytes(b"body".to_vec()));
+
+        let result: Result<(HashMap<String, String>, BytesBody)> = client_for(addr).do_request(request);
+        assert!(result.is_ok(), "{:?}", result.err());
+
+        let (_, body) = server.join().unwrap();
+        assert_eq!(body, b"body".to_vec());
+
+        let (_, bytes_body) = result.unwrap();
+        let buf = bytes_body.save_to_buffer(Some(callback), Some(2)).unwrap();
+        assert_eq!(buf, b"ok".to_vec());
+
+        assert_eq!(*events.lock().unwrap(), vec![(0, Some(2)), (2, Some(2))]);
+    }
 }

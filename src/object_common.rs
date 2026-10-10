@@ -6,6 +6,7 @@ use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use crate::{
     common::{self, build_tag_string, MetadataDirective, ObjectType, ServerSideEncryptionAlgorithm, StorageClass, TagDirective, MIME_TYPE_XML},
     error::Error,
+    progress::ProgressCallback,
     request::{OssRequest, RequestMethod},
     util::{sanitize_etag, validate_bucket_name, validate_meta_key, validate_object_key, validate_tag_key, validate_tag_value},
     RequestBody, Result,
@@ -240,7 +241,27 @@ pub struct PutObjectOptions {
     pub tags: HashMap<String, String>,
 
     /// For `put_object` only.
+    ///
+    /// 注意：这是 OSS 的**服务端**上传回调（上传完成后由 OSS 回调你的业务服务器），
+    /// 不是客户端本地的上传进度通知。进度通知请使用 [`Self::progress`]。
     pub callback: Option<Callback>,
+
+    /// 上传进度回调。见 [`crate::progress`] 了解回调契约。
+    ///
+    /// 适用于 `put_object_from_file/buffer/base64`、`append_object_from_*`。
+    /// 通过 [`AppendObjectOptions`] / [`crate::multipart_common::InitiateMultipartUploadOptions`]
+    /// 这两个类型别名也能设置，但后者（`initiate_multipart_uploads`）的请求体是空的，
+    /// 不会触发任何回调。
+    ///
+    /// ```no_run
+    /// use ali_oss_rs::object_common::PutObjectOptionsBuilder;
+    ///
+    /// let options = PutObjectOptionsBuilder::new()
+    ///     .progress(|sent, total| println!("{}/{}", sent, total.unwrap_or(0)))
+    ///     .build();
+    /// ```
+    #[cfg_attr(feature = "serde-support", serde(skip))]
+    pub progress: ProgressCallback,
 
     /// 额外的 URI 查询参数。
     ///
@@ -265,6 +286,7 @@ pub struct PutObjectOptionsBuilder {
     metadata: HashMap<String, String>,
     tags: HashMap<String, String>,
     callback: Option<Callback>,
+    progress: ProgressCallback,
     parameters: HashMap<String, String>,
 }
 
@@ -286,6 +308,7 @@ impl PutObjectOptionsBuilder {
             metadata: HashMap::new(),
             tags: HashMap::new(),
             callback: None,
+            progress: ProgressCallback::default(),
             parameters: HashMap::new(),
         }
     }
@@ -365,6 +388,15 @@ impl PutObjectOptionsBuilder {
         self
     }
 
+    /// 设置上传进度回调：参数为 `(已传输字节数, 总字节数)`。见 [`crate::progress`]。
+    pub fn progress<F>(mut self, progress: F) -> Self
+    where
+        F: Fn(u64, Option<u64>) + Send + Sync + 'static,
+    {
+        self.progress = ProgressCallback::new(progress);
+        self
+    }
+
     pub fn parameter(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.parameters.insert(key.into(), value.into());
         self
@@ -387,6 +419,7 @@ impl PutObjectOptionsBuilder {
             metadata: self.metadata,
             tags: self.tags,
             callback: self.callback,
+            progress: self.progress,
             parameters: self.parameters,
         }
     }
@@ -476,6 +509,27 @@ pub struct GetObjectOptions {
 
     /// The version to retreive
     pub version_id: Option<String>,
+
+    /// 下载进度回调：参数为 `(已接收字节数, 本次传输总字节数)`。见 [`crate::progress`]。
+    ///
+    /// 首个事件恒为 `(0, total)`，在响应头到达、开始传输数据之前触发，
+    /// 之后每收到一个 chunk 触发一次。首个事件的 `total` 为 `Some` 就表示长度探测成功
+    /// （服务端返回了 `Content-Length`）；为 `None` 表示长度未知（分块传输，
+    /// 或者 `accept_encoding` 生效导致 OSS 省略了该响应头）。
+    /// range 下载时 `total` 是本次传输的区间长度，而不是整个 Object 的长度。
+    ///
+    /// ```no_run
+    /// use ali_oss_rs::object_common::GetObjectOptionsBuilder;
+    ///
+    /// let options = GetObjectOptionsBuilder::new()
+    ///     .progress(|received, total| match total {
+    ///         // 首个事件就能拿到总长度
+    ///         Some(total) => println!("{}/{}", received, total),
+    ///         None => println!("{} (总长度未知)", received),
+    ///     })
+    ///     .build();
+    /// ```
+    pub progress: ProgressCallback,
 }
 
 pub struct GetObjectOptionsBuilder {
@@ -491,6 +545,7 @@ pub struct GetObjectOptionsBuilder {
     response_content_disposition: Option<String>,
     response_content_encoding: Option<ContentEncoding>,
     version_id: Option<String>,
+    progress: ProgressCallback,
 }
 
 impl GetObjectOptionsBuilder {
@@ -508,6 +563,7 @@ impl GetObjectOptionsBuilder {
             response_content_disposition: None,
             response_content_encoding: None,
             version_id: None,
+            progress: ProgressCallback::default(),
         }
     }
 
@@ -571,6 +627,15 @@ impl GetObjectOptionsBuilder {
         self
     }
 
+    /// 设置下载进度回调：参数为 `(已接收字节数, 本次传输总字节数)`。见 [`crate::progress`]。
+    pub fn progress<F>(mut self, progress: F) -> Self
+    where
+        F: Fn(u64, Option<u64>) + Send + Sync + 'static,
+    {
+        self.progress = ProgressCallback::new(progress);
+        self
+    }
+
     pub fn build(self) -> GetObjectOptions {
         GetObjectOptions {
             range: self.range,
@@ -585,6 +650,7 @@ impl GetObjectOptionsBuilder {
             response_content_disposition: self.response_content_disposition,
             response_content_encoding: self.response_content_encoding,
             version_id: self.version_id,
+            progress: self.progress,
         }
     }
 }
@@ -598,6 +664,13 @@ impl Default for GetObjectOptionsBuilder {
 /// A "placeholder" struct for adding more fields in the future
 #[derive(Debug)]
 pub struct GetObjectResult;
+
+/// 从响应头中解析本次传输的内容长度。
+///
+/// 服务端未返回 `content-length` 时（分块传输，或者 `accept_encoding` 生效导致 OSS 省略该头）返回 `None`。
+pub(crate) fn content_length_from_headers(headers: &HashMap<String, String>) -> Option<u64> {
+    headers.get("content-length").and_then(|v| v.parse::<u64>().ok())
+}
 
 pub(crate) fn build_put_object_request(
     bucket_name: &str,
@@ -674,7 +747,15 @@ pub(crate) fn build_put_object_request(
     }
 
     // move the body to request
+    let has_body = !matches!(request_body, RequestBody::Empty);
     request = request.body(request_body);
+
+    // 空请求体（例如 `initiate_multipart_uploads`）不会有任何进度事件，所以不挂回调。
+    if has_body {
+        if let Some(progress) = options.as_ref().and_then(|o| o.progress.as_fn()) {
+            request = request.progress(progress);
+        }
+    }
 
     if let Some(options) = options {
         // if `mime_type` is specified, overwrite it's value which guess from file (maybe)

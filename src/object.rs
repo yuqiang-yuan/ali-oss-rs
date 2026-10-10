@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{collections::HashMap, path::Path};
 
 use async_trait::async_trait;
 use base64::{prelude::BASE64_STANDARD, Engine};
@@ -10,10 +10,11 @@ use crate::{
     error::Error,
     object_common::{
         build_copy_object_request, build_delete_multiple_objects_request, build_get_object_request, build_head_object_request, build_put_object_request,
-        build_restore_object_request, AppendObjectOptions, AppendObjectResult, CopyObjectOptions, CopyObjectResult, DeleteMultipleObjectsConfig,
-        DeleteMultipleObjectsResult, DeleteObjectOptions, DeleteObjectResult, GetObjectMetadataOptions, GetObjectOptions, GetObjectResult, HeadObjectOptions,
-        ObjectMetadata, PutObjectOptions, PutObjectResult, RestoreObjectRequest, RestoreObjectResult,
+        build_restore_object_request, content_length_from_headers, AppendObjectOptions, AppendObjectResult, CopyObjectOptions, CopyObjectResult,
+        DeleteMultipleObjectsConfig, DeleteMultipleObjectsResult, DeleteObjectOptions, DeleteObjectResult, GetObjectMetadataOptions, GetObjectOptions,
+        GetObjectResult, HeadObjectOptions, ObjectMetadata, PutObjectOptions, PutObjectResult, RestoreObjectRequest, RestoreObjectResult,
     },
+    progress::ProgressStream,
     request::{OssRequest, RequestMethod},
     util::{validate_bucket_name, validate_object_key, validate_path},
     ByteStream, Client, RequestBody, Result,
@@ -444,7 +445,9 @@ impl ObjectOperations for Client {
 
         let request = build_get_object_request(bucket_name, object_key, &options)?;
 
-        let (_, mut stream) = self.do_request::<ByteStream>(request).await?;
+        let (headers, stream) = self.do_request::<ByteStream>(request).await?;
+
+        let mut stream = wrap_download_stream(stream, &headers, &options);
 
         let mut file = tokio::fs::File::create(&file_path).await?;
 
@@ -470,7 +473,9 @@ impl ObjectOperations for Client {
 
         let request = build_get_object_request(bucket_name, object_key, &options)?;
 
-        let (_, mut stream) = self.do_request::<ByteStream>(request).await?;
+        let (headers, stream) = self.do_request::<ByteStream>(request).await?;
+
+        let mut stream = wrap_download_stream(stream, &headers, &options);
 
         let mut buf = Vec::new();
 
@@ -737,9 +742,28 @@ impl ObjectOperations for Client {
     }
 }
 
+/// 用进度回调包装下载响应体流。
+///
+/// 首个 `(0, total)` 事件在 body 被读取之前触发，`total` 是 `None` 还是 `Some`
+/// 就表示长度探测成功与否。
+fn wrap_download_stream(stream: ByteStream, headers: &HashMap<String, String>, options: &Option<GetObjectOptions>) -> ByteStream {
+    let total = content_length_from_headers(headers);
+
+    match options.as_ref().and_then(|o| o.progress.as_fn()) {
+        Some(cb) => {
+            cb(0, total);
+            Box::pin(ProgressStream::new(stream, cb, total))
+        }
+        None => stream,
+    }
+}
+
 #[cfg(test)]
 mod test_object_async {
-    use std::{collections::HashMap, sync::Once};
+    use std::{
+        collections::HashMap,
+        sync::{Arc, Mutex, Once},
+    };
 
     use base64::{prelude::BASE64_STANDARD, Engine};
     use uuid::Uuid;
@@ -756,9 +780,14 @@ mod test_object_async {
 
     static INIT: Once = Once::new();
 
+    /// 收集到的进度事件。
+    type Events = Arc<Mutex<Vec<(u64, Option<u64>)>>>;
+
     fn setup() {
         INIT.call_once(|| {
-            simple_logger::init_with_level(log::Level::Debug).unwrap();
+            // logger 是进程级的全局状态，测试并行跑的时候别的模块可能已经初始化过了。
+            // 这里不能 unwrap：panic 会让 Once 进入 poisoned 状态，导致本模块后续所有测试都失败。
+            simple_logger::init_with_level(log::Level::Debug).ok();
             dotenvy::dotenv().unwrap();
         });
     }
@@ -1445,5 +1474,232 @@ mod test_object_async {
         }
 
         client.delete_object(&bucket, &object, None).await.unwrap();
+    }
+
+    /// 上传进度：首个事件是 `(0, total)`，最后一个是 `(total, total)`，且单调递增。
+    ///
+    /// 这个测试自己生成临时文件，不依赖本机已有的 fixture 文件。
+    #[tokio::test]
+    async fn test_upload_progress_async() {
+        setup();
+
+        let client = Client::from_env();
+
+        let bucket = "yuanyq";
+        let object = format!("rust-sdk-test/upload-progress-{}.bin", uuid::Uuid::new_v4());
+
+        // 200 KiB，保证会产生多个进度事件
+        let payload = vec![b'p'; 200 * 1024];
+        let file_path = std::env::temp_dir().join(format!("ali-oss-rs-upload-progress-{}.bin", uuid::Uuid::new_v4()));
+        std::fs::write(&file_path, &payload).unwrap();
+
+        let events: Events = Arc::new(Mutex::new(Vec::new()));
+        let recorder = events.clone();
+
+        let options = PutObjectOptionsBuilder::new()
+            .progress(move |transferred, total| recorder.lock().unwrap().push((transferred, total)))
+            .build();
+
+        let result = client.put_object_from_file(bucket, &object, &file_path, Some(options)).await;
+        assert!(result.is_ok(), "{:?}", result.err());
+
+        let total = payload.len() as u64;
+
+        // 用一个块把 MutexGuard 的作用域限制住，避免它跨越后面的 await
+        {
+            let events = events.lock().unwrap();
+
+            assert_eq!(events.first(), Some(&(0, Some(total))), "首个事件应该是 (0, total)：{:?}", *events);
+            assert_eq!(events.last(), Some(&(total, Some(total))), "最后一个事件应该是 (total, total)：{:?}", *events);
+            assert!(events.windows(2).all(|w| w[0].0 < w[1].0), "进度不是单调递增的：{:?}", *events);
+            assert!(events.len() > 2, "文件上传应该产生多于两个事件：{:?}", *events);
+        }
+
+        client.delete_object(bucket, &object, None).await.unwrap();
+        std::fs::remove_file(&file_path).ok();
+    }
+
+    /// 下载进度：长度探测回调必须最先触发且等于对象大小，进度事件首尾正确。
+    #[tokio::test]
+    async fn test_download_progress_async() {
+        setup();
+
+        let client = Client::from_env();
+
+        let bucket = "yuanyq";
+        let object = format!("rust-sdk-test/download-progress-{}.bin", uuid::Uuid::new_v4());
+
+        let payload = vec![b'd'; 200 * 1024];
+        let src = std::env::temp_dir().join(format!("ali-oss-rs-download-src-{}.bin", uuid::Uuid::new_v4()));
+        let dst = std::env::temp_dir().join(format!("ali-oss-rs-download-dst-{}.bin", uuid::Uuid::new_v4()));
+        std::fs::write(&src, &payload).unwrap();
+
+        client.put_object_from_file(bucket, &object, &src, None).await.unwrap();
+
+        let events: Events = Arc::new(Mutex::new(Vec::new()));
+        let recorder = events.clone();
+
+        let options = GetObjectOptionsBuilder::new()
+            .progress(move |received, total| recorder.lock().unwrap().push((received, total)))
+            .build();
+
+        let result = client.get_object_to_file(bucket, &object, &dst, Some(options)).await;
+        assert!(result.is_ok(), "{:?}", result.err());
+
+        assert_eq!(std::fs::read(&dst).unwrap(), payload);
+
+        let total = payload.len() as u64;
+
+        // 用一个块把 MutexGuard 的作用域限制住，避免它跨越后面的 await
+        {
+            let events = events.lock().unwrap();
+
+            assert!(events.len() > 2, "{:?}", *events);
+            // 首个事件带上了总长度，说明长度探测成功
+            assert_eq!(events[0], (0, Some(total)), "首个事件应该带上探测到的总长度：{:?}", *events);
+            assert_eq!(events[events.len() - 1], (total, Some(total)), "{:?}", *events);
+            assert!(events.windows(2).all(|w| w[0].0 < w[1].0), "进度不是单调递增的：{:?}", *events);
+        }
+
+        client.delete_object(bucket, &object, None).await.unwrap();
+        std::fs::remove_file(&src).ok();
+        std::fs::remove_file(&dst).ok();
+    }
+
+    /// range 下载时，首个事件带上的是本次传输的区间长度，而不是整个 Object 的长度。
+    #[tokio::test]
+    async fn test_download_progress_with_range_async() {
+        setup();
+
+        let client = Client::from_env();
+
+        let bucket = "yuanyq";
+        let object = format!("rust-sdk-test/download-progress-range-{}.bin", uuid::Uuid::new_v4());
+
+        let payload = vec![b'r'; 4096];
+        let src = std::env::temp_dir().join(format!("ali-oss-rs-range-src-{}.bin", uuid::Uuid::new_v4()));
+        let dst = std::env::temp_dir().join(format!("ali-oss-rs-range-dst-{}.bin", uuid::Uuid::new_v4()));
+        std::fs::write(&src, &payload).unwrap();
+
+        client.put_object_from_file(bucket, &object, &src, None).await.unwrap();
+
+        let events: Events = Arc::new(Mutex::new(Vec::new()));
+        let recorder = events.clone();
+
+        let options = GetObjectOptionsBuilder::new()
+            .range("bytes=0-499")
+            .progress(move |received, total| recorder.lock().unwrap().push((received, total)))
+            .build();
+
+        let result = client.get_object_to_file(bucket, &object, &dst, Some(options)).await;
+        assert!(result.is_ok(), "{:?}", result.err());
+
+        assert_eq!(std::fs::read(&dst).unwrap().len(), 500);
+
+        {
+            let events = events.lock().unwrap();
+
+            assert_eq!(events[0], (0, Some(500)), "range 下载时应该上报区间长度：{:?}", *events);
+            assert_eq!(events[events.len() - 1], (500, Some(500)), "{:?}", *events);
+        }
+
+        client.delete_object(bucket, &object, None).await.unwrap();
+        std::fs::remove_file(&src).ok();
+        std::fs::remove_file(&dst).ok();
+    }
+}
+
+/// 下载进度的离线测试：不依赖网络和凭证。
+#[cfg(test)]
+mod test_download_progress {
+    use std::{
+        collections::HashMap,
+        sync::{Arc, Mutex},
+    };
+
+    use bytes::Bytes;
+    use futures::{executor::block_on, StreamExt};
+
+    use crate::{object_common::GetObjectOptionsBuilder, ByteStream};
+
+    use super::wrap_download_stream;
+
+    /// 收集到的进度事件。
+    type Events = Arc<Mutex<Vec<(u64, Option<u64>)>>>;
+
+    fn chunk_stream(chunks: &[&'static [u8]]) -> ByteStream {
+        let chunks: Vec<std::result::Result<Bytes, reqwest::Error>> = chunks.iter().map(|c| Ok(Bytes::from_static(c))).collect();
+        Box::pin(futures::stream::iter(chunks))
+    }
+
+    /// 首个事件在 body 被读取之前就带上了探测到的总长度。
+    #[test]
+    fn test_first_event_carries_detected_content_length() {
+        let events: Events = Arc::new(Mutex::new(Vec::new()));
+        let recorder = events.clone();
+
+        let options = GetObjectOptionsBuilder::new()
+            .progress(move |received, total| recorder.lock().unwrap().push((received, total)))
+            .build();
+
+        let headers = HashMap::from([("content-length".to_string(), "5".to_string())]);
+
+        let stream = wrap_download_stream(chunk_stream(&[b"he", b"llo"]), &headers, &Some(options));
+
+        let collected: Vec<Bytes> = block_on(stream.map(|r| r.unwrap()).collect::<Vec<Bytes>>());
+        assert_eq!(collected.concat(), b"hello".to_vec());
+
+        assert_eq!(*events.lock().unwrap(), vec![(0, Some(5)), (2, Some(5)), (5, Some(5))]);
+    }
+
+    /// 服务端没返回 `content-length` 时（chunked、或者 gzip 生效），首个事件的 total 就是 `None`，
+    /// 调用方据此判断长度探测失败。
+    #[test]
+    fn test_missing_content_length_reports_unknown_total() {
+        let events: Events = Arc::new(Mutex::new(Vec::new()));
+        let recorder = events.clone();
+
+        let options = GetObjectOptionsBuilder::new()
+            .progress(move |received, total| recorder.lock().unwrap().push((received, total)))
+            .build();
+
+        // 模拟 gzip 生效的响应：只有 content-encoding，没有 content-length
+        let headers = HashMap::from([("content-encoding".to_string(), "gzip".to_string())]);
+
+        let stream = wrap_download_stream(chunk_stream(&[b"abc", b"de"]), &headers, &Some(options));
+        let collected: Vec<Bytes> = block_on(stream.map(|r| r.unwrap()).collect::<Vec<Bytes>>());
+
+        assert_eq!(collected.concat(), b"abcde".to_vec());
+        assert_eq!(*events.lock().unwrap(), vec![(0, None), (3, None), (5, None)]);
+    }
+
+    /// 没设置回调时，流应该原样透传。
+    #[test]
+    fn test_without_callbacks_stream_passes_through() {
+        let headers = HashMap::from([("content-length".to_string(), "5".to_string())]);
+
+        let stream = wrap_download_stream(chunk_stream(&[b"he", b"llo"]), &headers, &None);
+        let collected: Vec<Bytes> = block_on(stream.map(|r| r.unwrap()).collect::<Vec<Bytes>>());
+
+        assert_eq!(collected.concat(), b"hello".to_vec());
+    }
+
+    /// 内容长度解析失败（头存在但不是合法数字）时，total 也应该是 `None`。
+    #[test]
+    fn test_malformed_content_length_reports_unknown_total() {
+        let events: Events = Arc::new(Mutex::new(Vec::new()));
+        let recorder = events.clone();
+
+        let options = GetObjectOptionsBuilder::new()
+            .progress(move |received, total| recorder.lock().unwrap().push((received, total)))
+            .build();
+
+        let headers = HashMap::from([("content-length".to_string(), "not-a-number".to_string())]);
+
+        let stream = wrap_download_stream(chunk_stream(&[b"hello"]), &headers, &Some(options));
+        let collected: Vec<Bytes> = block_on(stream.map(|r| r.unwrap()).collect::<Vec<Bytes>>());
+
+        assert_eq!(collected.concat(), b"hello".to_vec());
+        assert_eq!(*events.lock().unwrap(), vec![(0, None), (5, None)]);
     }
 }

@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{collections::HashMap, path::Path};
 
 use base64::{prelude::BASE64_STANDARD, Engine};
 use reqwest::StatusCode;
@@ -7,10 +7,11 @@ use crate::{
     error::Error,
     object_common::{
         build_copy_object_request, build_delete_multiple_objects_request, build_get_object_request, build_head_object_request, build_put_object_request,
-        build_restore_object_request, AppendObjectOptions, AppendObjectResult, CopyObjectOptions, CopyObjectResult, DeleteMultipleObjectsConfig,
-        DeleteMultipleObjectsResult, DeleteObjectOptions, DeleteObjectResult, GetObjectMetadataOptions, GetObjectOptions, GetObjectResult, HeadObjectOptions,
-        ObjectMetadata, PutObjectOptions, PutObjectResult, RestoreObjectRequest, RestoreObjectResult,
+        build_restore_object_request, content_length_from_headers, AppendObjectOptions, AppendObjectResult, CopyObjectOptions, CopyObjectResult,
+        DeleteMultipleObjectsConfig, DeleteMultipleObjectsResult, DeleteObjectOptions, DeleteObjectResult, GetObjectMetadataOptions, GetObjectOptions,
+        GetObjectResult, HeadObjectOptions, ObjectMetadata, PutObjectOptions, PutObjectResult, RestoreObjectRequest, RestoreObjectResult,
     },
+    progress::ProgressFn,
     request::{OssRequest, RequestMethod},
     util::{validate_bucket_name, validate_object_key, validate_path},
     RequestBody, Result,
@@ -427,9 +428,11 @@ impl ObjectOperations for Client {
 
         let request = build_get_object_request(bucket_name, object_key, &options)?;
 
-        let (_, mut stream) = self.do_request::<BytesBody>(request)?;
+        let (headers, mut stream) = self.do_request::<BytesBody>(request)?;
 
-        stream.save_to_file(file_path)?;
+        let (progress, total) = download_progress(&headers, &options);
+
+        stream.save_to_file(file_path, progress, total)?;
 
         Ok(GetObjectResult)
     }
@@ -447,9 +450,11 @@ impl ObjectOperations for Client {
 
         let request = build_get_object_request(bucket_name, object_key, &options)?;
 
-        let (_, stream) = self.do_request::<BytesBody>(request)?;
+        let (headers, stream) = self.do_request::<BytesBody>(request)?;
 
-        stream.save_to_buffer()
+        let (progress, total) = download_progress(&headers, &options);
+
+        stream.save_to_buffer(progress, total)
     }
 
     /// Create a "folder"
@@ -702,9 +707,19 @@ impl ObjectOperations for Client {
     }
 }
 
+/// 从下载响应头中取出 `(进度回调, 本次传输总长度)`。
+///
+/// `total` 是 `None` 还是 `Some` 就表示长度探测成功与否。
+fn download_progress(headers: &HashMap<String, String>, options: &Option<GetObjectOptions>) -> (Option<ProgressFn>, Option<u64>) {
+    (options.as_ref().and_then(|o| o.progress.as_fn()), content_length_from_headers(headers))
+}
+
 #[cfg(all(test, feature = "blocking"))]
 mod test_object_blocking {
-    use std::{collections::HashMap, sync::Once};
+    use std::{
+        collections::HashMap,
+        sync::{Arc, Mutex, Once},
+    };
 
     use base64::{prelude::BASE64_STANDARD, Engine};
     use uuid::Uuid;
@@ -721,9 +736,14 @@ mod test_object_blocking {
 
     static INIT: Once = Once::new();
 
+    /// 收集到的进度事件。
+    type Events = Arc<Mutex<Vec<(u64, Option<u64>)>>>;
+
     fn setup() {
         INIT.call_once(|| {
-            simple_logger::init_with_level(log::Level::Debug).unwrap();
+            // logger 是进程级的全局状态，测试并行跑的时候别的模块可能已经初始化过了。
+            // 这里不能 unwrap：panic 会让 Once 进入 poisoned 状态，导致本模块后续所有测试都失败。
+            simple_logger::init_with_level(log::Level::Debug).ok();
             dotenvy::dotenv().unwrap();
         });
     }
@@ -1389,5 +1409,91 @@ mod test_object_blocking {
         }
 
         client.delete_object(&bucket, &object, None).unwrap();
+    }
+
+    /// 同步上传进度：首个事件是 `(0, total)`，最后一个是 `(total, total)`，且单调递增。
+    ///
+    /// 这个测试自己生成临时文件，不依赖本机已有的 fixture 文件。
+    #[test]
+    fn test_upload_progress_blocking() {
+        setup();
+
+        let client = Client::from_env();
+
+        let bucket = "yuanyq";
+        let object = format!("rust-sdk-test/upload-progress-blocking-{}.bin", Uuid::new_v4());
+
+        // 200 KiB，保证会产生多个进度事件
+        let payload = vec![b'p'; 200 * 1024];
+        let file_path = std::env::temp_dir().join(format!("ali-oss-rs-upload-progress-blocking-{}.bin", Uuid::new_v4()));
+        std::fs::write(&file_path, &payload).unwrap();
+
+        let events: Events = Arc::new(Mutex::new(Vec::new()));
+        let recorder = events.clone();
+
+        let options = PutObjectOptionsBuilder::new()
+            .progress(move |transferred, total| recorder.lock().unwrap().push((transferred, total)))
+            .build();
+
+        let result = client.put_object_from_file(bucket, &object, &file_path, Some(options));
+        assert!(result.is_ok(), "{:?}", result.err());
+
+        let total = payload.len() as u64;
+        let events = events.lock().unwrap();
+
+        assert_eq!(events.first(), Some(&(0, Some(total))), "首个事件应该是 (0, total)：{:?}", *events);
+        assert_eq!(events.last(), Some(&(total, Some(total))), "最后一个事件应该是 (total, total)：{:?}", *events);
+        assert!(events.windows(2).all(|w| w[0].0 < w[1].0), "进度不是单调递增的：{:?}", *events);
+        assert!(events.len() > 2, "文件上传应该产生多于两个事件：{:?}", *events);
+
+        drop(events);
+
+        client.delete_object(bucket, &object, None).unwrap();
+        std::fs::remove_file(&file_path).ok();
+    }
+
+    /// 同步下载进度：首个事件带上探测到的总长度，进度事件首尾正确。
+    #[test]
+    fn test_download_progress_blocking() {
+        setup();
+
+        let client = Client::from_env();
+
+        let bucket = "yuanyq";
+        let object = format!("rust-sdk-test/download-progress-blocking-{}.bin", Uuid::new_v4());
+
+        let payload = vec![b'd'; 200 * 1024];
+        let src = std::env::temp_dir().join(format!("ali-oss-rs-download-src-blocking-{}.bin", Uuid::new_v4()));
+        let dst = std::env::temp_dir().join(format!("ali-oss-rs-download-dst-blocking-{}.bin", Uuid::new_v4()));
+        std::fs::write(&src, &payload).unwrap();
+
+        client.put_object_from_file(bucket, &object, &src, None).unwrap();
+
+        let events: Events = Arc::new(Mutex::new(Vec::new()));
+        let recorder = events.clone();
+
+        let options = GetObjectOptionsBuilder::new()
+            .progress(move |received, total| recorder.lock().unwrap().push((received, total)))
+            .build();
+
+        let result = client.get_object_to_file(bucket, &object, &dst, Some(options));
+        assert!(result.is_ok(), "{:?}", result.err());
+
+        assert_eq!(std::fs::read(&dst).unwrap(), payload);
+
+        let events = events.lock().unwrap();
+        let total = payload.len() as u64;
+
+        assert!(events.len() > 2, "{:?}", *events);
+        // 首个事件带上了总长度，说明长度探测成功
+        assert_eq!(events[0], (0, Some(total)), "首个事件应该带上探测到的总长度：{:?}", *events);
+        assert_eq!(events[events.len() - 1], (total, Some(total)), "{:?}", *events);
+        assert!(events.windows(2).all(|w| w[0].0 < w[1].0), "进度不是单调递增的：{:?}", *events);
+
+        drop(events);
+
+        client.delete_object(bucket, &object, None).unwrap();
+        std::fs::remove_file(&src).ok();
+        std::fs::remove_file(&dst).ok();
     }
 }

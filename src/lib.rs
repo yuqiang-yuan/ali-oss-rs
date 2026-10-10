@@ -13,6 +13,7 @@ pub mod object;
 pub mod object_common;
 pub mod presign;
 pub mod presign_common;
+pub mod progress;
 pub mod request;
 pub mod symlink;
 pub mod symlink_common;
@@ -341,23 +342,71 @@ impl Client {
 
         let mut req_builder = self.http_client.request(oss_request.method.into(), Url::parse(&full_url)?).headers(header_map);
 
+        let progress = oss_request.progress.take();
+
+        // 内存中的 body 没法分块上报进度，只能等整个 body 交给底层传输之后再补一次完成事件。
+        // 这里记录 (回调, 总长度)，在 execute 之后触发。
+        let mut in_memory_progress = None;
+
         // 根据 body 类型设置请求体
         req_builder = match oss_request.body {
             RequestBody::Empty => req_builder,
-            RequestBody::Text(text) => req_builder.body(text),
-            RequestBody::Bytes(bytes) => req_builder.body(bytes),
-            RequestBody::File(path, range) => {
-                if let Some(rng) = range {
-                    let mut file = tokio::fs::File::open(path).await?;
-                    file.seek(tokio::io::SeekFrom::Start(rng.start)).await?;
-                    let limited_reader = file.take(rng.end - rng.start);
-                    // Create a stream from the limited reader
-                    let stream = FramedRead::new(limited_reader, BytesCodec::new()).map(|r| r.map(|bytes| bytes.freeze()));
-                    req_builder.body(Body::wrap_stream(stream))
-                } else {
-                    req_builder.body(tokio::fs::File::open(path).await?)
+            RequestBody::Text(text) => {
+                if let Some(cb) = progress {
+                    let len = text.len() as u64;
+                    cb(0, Some(len));
+                    in_memory_progress = Some((cb, len));
                 }
+
+                req_builder.body(text)
             }
+            RequestBody::Bytes(bytes) => {
+                // 注意：这里刻意不把 `Bytes` 转成 stream。reqwest 对内存 body 的 `try_reuse()`
+                // 返回 `Some`，可以重放 307/308 重定向；换成 `wrap_stream` 会静默失去这个能力，
+                // 而对已经在内存里的数据来说也没有任何信息增益。
+                if let Some(cb) = progress {
+                    let len = bytes.len() as u64;
+                    cb(0, Some(len));
+                    in_memory_progress = Some((cb, len));
+                }
+
+                req_builder.body(bytes)
+            }
+            RequestBody::File(path, range) => match progress {
+                None => {
+                    if let Some(rng) = range {
+                        let mut file = tokio::fs::File::open(path).await?;
+                        file.seek(tokio::io::SeekFrom::Start(rng.start)).await?;
+                        let limited_reader = file.take(rng.end - rng.start);
+                        // Create a stream from the limited reader
+                        let stream = FramedRead::new(limited_reader, BytesCodec::new()).map(|r| r.map(|bytes| bytes.freeze()));
+                        req_builder.body(Body::wrap_stream(stream))
+                    } else {
+                        req_builder.body(tokio::fs::File::open(path).await?)
+                    }
+                }
+                Some(cb) => {
+                    let mut file = tokio::fs::File::open(path).await?;
+
+                    // 不从 `content-length` 头取长度：直接用文件元数据 / range，避免依赖调用方
+                    // 是否设置了那个头。
+                    let (start, len) = match range {
+                        Some(rng) => (rng.start, rng.end - rng.start),
+                        None => (0, file.metadata().await?.len()),
+                    };
+
+                    if start > 0 {
+                        file.seek(tokio::io::SeekFrom::Start(start)).await?;
+                    }
+
+                    cb(0, Some(len));
+
+                    let limited_reader = file.take(len);
+                    let stream = FramedRead::with_capacity(limited_reader, BytesCodec::new(), progress::CHUNK_SIZE).map(|r| r.map(|bytes| bytes.freeze()));
+
+                    req_builder.body(Body::wrap_stream(progress::ProgressStream::new(stream, cb, Some(len))))
+                }
+            },
         };
 
         let req = req_builder.build()?;
@@ -367,6 +416,10 @@ impl Client {
         }
 
         let response = self.http_client.execute(req).await?;
+
+        if let Some((cb, len)) = in_memory_progress {
+            cb(len, Some(len));
+        }
 
         let mut response_headers = HashMap::new();
 
@@ -463,4 +516,245 @@ fn test_client_build() {
     assert_eq!(config.region, "cn-hangzhou");
     assert_eq!(config.scheme, "https");
     assert_eq!(config.endpoint, "oss-cn-hangzhou.aliyuncs.com");
+}
+
+/// 这些测试起一个本地 TCP 服务器当 OSS，不依赖网络和凭证，可以直接进 CI。
+#[cfg(test)]
+mod test_upload_progress {
+    use std::{net::SocketAddr, sync::Arc};
+
+    use tokio::{
+        io::{AsyncReadExt, AsyncWriteExt},
+        net::TcpListener,
+    };
+
+    use crate::{
+        progress::ProgressFn,
+        request::{OssRequest, RequestMethod},
+        Client, RequestBody, Result,
+    };
+
+    fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+        haystack.windows(needle.len()).position(|w| w == needle)
+    }
+
+    /// 起一个只处理一个连接的 HTTP 服务器，返回它收到的 `(原始请求头, 请求体)`。
+    async fn spawn_server() -> (SocketAddr, tokio::task::JoinHandle<(String, Vec<u8>)>) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        let handle = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+
+            let mut buf = Vec::new();
+            let mut tmp = [0u8; 8192];
+
+            // 先读到请求头结束
+            let head_end = loop {
+                let n = socket.read(&mut tmp).await.unwrap();
+                assert!(n > 0, "连接在请求头读完之前就关闭了");
+
+                buf.extend_from_slice(&tmp[..n]);
+
+                if let Some(pos) = find_subslice(&buf, b"\r\n\r\n") {
+                    break pos + 4;
+                }
+            };
+
+            let head = String::from_utf8_lossy(&buf[..head_end]).to_string();
+
+            let content_length: usize = head
+                .lines()
+                .find_map(|line| {
+                    let (k, v) = line.split_once(':')?;
+                    if k.eq_ignore_ascii_case("content-length") {
+                        v.trim().parse().ok()
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or(0);
+
+            // 再读满请求体
+            while buf.len() < head_end + content_length {
+                let n = socket.read(&mut tmp).await.unwrap();
+                if n == 0 {
+                    break;
+                }
+                buf.extend_from_slice(&tmp[..n]);
+            }
+
+            let body = buf[head_end..].to_vec();
+
+            socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok").await.unwrap();
+            socket.flush().await.unwrap();
+
+            (head, body)
+        });
+
+        (addr, handle)
+    }
+
+    /// 构造一个指向本地服务器的 Client。
+    fn client_for(addr: SocketAddr) -> Client {
+        Client {
+            access_key_id: "test_access_key_id".to_string(),
+            access_key_secret: "test_access_key_secret".to_string(),
+            region: "cn-hangzhou".to_string(),
+            endpoint: addr.to_string(),
+            scheme: "http".to_string(),
+            sts_token: None,
+            http_client: reqwest::Client::new(),
+        }
+    }
+
+    /// 收集到的进度事件。
+    type Events = Arc<std::sync::Mutex<Vec<(u64, Option<u64>)>>>;
+
+    fn recorder() -> (Events, ProgressFn) {
+        let events = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let cloned = events.clone();
+
+        let callback: ProgressFn = Arc::new(move |transferred, total| {
+            cloned.lock().unwrap().push((transferred, total));
+        });
+
+        (events, callback)
+    }
+
+    /// 关键回归测试：文件上传的 body 是「未知长度的流 + 显式 content-length 头」，
+    /// 必须仍然以固定的 Content-Length 发送，**不能**降级成 `Transfer-Encoding: chunked`。
+    ///
+    /// 同时验证进度回调的首尾事件和单调性。
+    #[tokio::test]
+    async fn test_file_upload_progress_keeps_content_length_framing() {
+        let (addr, server) = spawn_server().await;
+
+        // 200 KiB，保证会被切成多个 64 KiB 的块
+        let payload = vec![b'x'; 200 * 1024];
+
+        let dir = std::env::temp_dir().join(format!("ali-oss-rs-progress-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file_path = dir.join("payload.bin");
+        std::fs::write(&file_path, &payload).unwrap();
+
+        let (events, callback) = recorder();
+
+        let request = OssRequest::new()
+            .method(RequestMethod::Put)
+            .object("payload.bin")
+            .content_length(payload.len() as u64)
+            .body(RequestBody::File(file_path.clone(), None))
+            .progress(callback);
+
+        let result: Result<(std::collections::HashMap<String, String>, String)> = client_for(addr).do_request(request).await;
+        assert!(result.is_ok(), "{:?}", result.err());
+
+        let (head, body) = server.await.unwrap();
+
+        let lower = head.to_lowercase();
+        assert!(lower.contains(&format!("content-length: {}", payload.len())), "请求头里没有正确的 content-length:\n{}", head);
+        assert!(!lower.contains("transfer-encoding"), "请求被降级成了 chunked:\n{}", head);
+        assert_eq!(body, payload);
+
+        let events = events.lock().unwrap();
+        let total = payload.len() as u64;
+
+        assert_eq!(events.first(), Some(&(0, Some(total))), "首个事件应该是 (0, total)：{:?}", *events);
+        assert_eq!(events.last(), Some(&(total, Some(total))), "最后一个事件应该是 (total, total)：{:?}", *events);
+        assert!(events.windows(2).all(|w| w[0].0 < w[1].0), "进度不是单调递增的：{:?}", *events);
+        assert!(events.len() > 2, "文件 body 应该产生多于两个事件：{:?}", *events);
+
+        std::fs::remove_file(&file_path).ok();
+    }
+
+    /// range 上传（分片上传用的路径）同样要保持 framing 正确。
+    #[tokio::test]
+    async fn test_ranged_upload_progress() {
+        let (addr, server) = spawn_server().await;
+
+        let payload = vec![b'y'; 100 * 1024];
+
+        let dir = std::env::temp_dir().join(format!("ali-oss-rs-progress-range-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file_path = dir.join("payload.bin");
+        std::fs::write(&file_path, &payload).unwrap();
+
+        let (events, callback) = recorder();
+
+        // 只上传 [1024, 1024 + 40KiB) 这一段
+        let range = 1024u64..(1024 + 40 * 1024);
+        let expected = payload[range.start as usize..range.end as usize].to_vec();
+
+        let request = OssRequest::new()
+            .method(RequestMethod::Put)
+            .object("payload.bin")
+            .content_length(expected.len() as u64)
+            .body(RequestBody::File(file_path.clone(), Some(range.clone())))
+            .progress(callback);
+
+        let result: Result<(std::collections::HashMap<String, String>, String)> = client_for(addr).do_request(request).await;
+        assert!(result.is_ok(), "{:?}", result.err());
+
+        let (head, body) = server.await.unwrap();
+
+        let lower = head.to_lowercase();
+        assert!(lower.contains(&format!("content-length: {}", expected.len())), "请求头里没有正确的 content-length:\n{}", head);
+        assert!(!lower.contains("transfer-encoding"), "请求被降级成了 chunked:\n{}", head);
+        assert_eq!(body, expected);
+
+        let events = events.lock().unwrap();
+        let total = expected.len() as u64;
+        assert_eq!(events.first(), Some(&(0, Some(total))));
+        assert_eq!(events.last(), Some(&(total, Some(total))));
+
+        std::fs::remove_file(&file_path).ok();
+    }
+
+    /// 内存 body 不走流式路径，只上报首尾两个事件。
+    #[tokio::test]
+    async fn test_buffer_upload_progress_reports_boundaries_only() {
+        let (addr, server) = spawn_server().await;
+
+        let payload = vec![b'z'; 32 * 1024];
+        let (events, callback) = recorder();
+
+        let request = OssRequest::new()
+            .method(RequestMethod::Put)
+            .object("payload.bin")
+            .content_length(payload.len() as u64)
+            .body(RequestBody::Bytes(payload.clone()))
+            .progress(callback);
+
+        let result: Result<(std::collections::HashMap<String, String>, String)> = client_for(addr).do_request(request).await;
+        assert!(result.is_ok(), "{:?}", result.err());
+
+        let (_, body) = server.await.unwrap();
+        assert_eq!(body, payload);
+
+        let events = events.lock().unwrap();
+        let total = payload.len() as u64;
+        assert_eq!(*events, vec![(0, Some(total)), (total, Some(total))]);
+    }
+
+    /// 没有请求体的请求（例如 initiate_multipart_uploads）不应该触发任何回调。
+    #[tokio::test]
+    async fn test_empty_body_triggers_no_progress() {
+        let (addr, server) = spawn_server().await;
+
+        let (events, callback) = recorder();
+
+        let request = OssRequest::new()
+            .method(RequestMethod::Post)
+            .object("payload.bin")
+            .body(RequestBody::Empty)
+            .progress(callback);
+
+        let result: Result<(std::collections::HashMap<String, String>, String)> = client_for(addr).do_request(request).await;
+        assert!(result.is_ok(), "{:?}", result.err());
+
+        let _ = server.await.unwrap();
+
+        assert!(events.lock().unwrap().is_empty(), "空请求体不应该触发进度回调");
+    }
 }

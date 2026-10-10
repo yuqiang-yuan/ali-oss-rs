@@ -31,9 +31,12 @@ Aliyun Object Storage Service (OSS) is a massive, secure, cost-effective, and hi
   - List objects in bucket. (v2)
 - Objects
   - Put object: upload local file, buffer, base64 string with callback support
+  - Put object: report upload progress via a callback (`PutObjectOptions::progress`)
   - Put object: create a folder
   - Get object: download to local file
   - Get object: download to memory
+  - Get object: report download progress and the detected content length via a callback
+    (`GetObjectOptions::progress`)
   - Get object metadata
   - Head object: get detail metadata of an object
   - Copy object

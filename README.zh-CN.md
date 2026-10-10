@@ -33,9 +33,11 @@
   - 列出 bucket 中的文件
 - Object
   - 创建 object。支持从本地文件、字节数据、Base64 字符串上传。支持回调
+  - 创建 object。支持通过回调上报上传进度（`PutObjectOptions::progress`）
   - 创建目录
   - 下载 object 到本地文件
   - 下载 object 到内存
+  - 下载 object。支持通过回调上报下载进度和探测到的内容长度（`GetObjectOptions::progress`）
   - 获取 object 元数据
   - 获取 object 详细的元数据
   - 复制 object
